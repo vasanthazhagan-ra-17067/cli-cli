@@ -25,7 +25,7 @@ superseded_by: ""
 
 Zoho Cliq supports two auth mechanisms:
 1. **Personal Access Token (PAT)** — a long-lived token generated manually via the Zoho developer console. Simple to issue, no browser flow required.
-2. **OAuth 2.0** — token exchange flow requiring a browser redirect or client credentials; supports fine-grained scopes and token refresh.
+2. **OAuth 2.0** — token exchange flow driven entirely via the Zoho OAuth2 API from the terminal (no browser, no local redirect listener, no callback URL required); supports fine-grained scopes and automatic token refresh. The planned v2 implementation accepts `--client-id` and `--client-secret` at `account add` and calls the Zoho OAuth token endpoint directly from the CLI process.
 
 ## Decision
 
@@ -76,10 +76,10 @@ The `scope` command group and the `NeedsReauth` / `Scopes` fields on `AccountEnt
 - **ALT-001**: **Description**: Implement the OAuth2 client credentials flow (machine-to-machine, no browser) using the Zoho OAuth2 endpoint. This grants more granular, scope-controlled tokens.
 - **ALT-002**: **Rejection Reason**: Client credentials flow requires a client ID and client secret to be provisioned per installation, which introduces an out-of-band registration step not suitable for a self-contained CLI tool. PATs achieve the same zero-browser-interaction goal with a simpler setup story for v1.
 
-### OAuth2 Authorization Code Flow in v1
+### OAuth2 Authorization Code (Browser) Flow
 
-- **ALT-003**: **Description**: Implement the full browser-based authorization code flow, opening the default browser and spinning up a local HTTP redirect listener.
-- **ALT-004**: **Rejection Reason**: The primary consumer (AI agent) has no browser and cannot handle redirect flows. Browser-based auth is explicitly listed as a v1 Non-Goal.
+- **ALT-003**: **Description**: Implement the standard browser-based authorization code flow — open the user's default browser to the Zoho login page and spin up a local HTTP redirect listener to capture the callback.
+- **ALT-004**: **Rejection Reason**: The primary consumer (AI agent) has no browser and cannot handle redirect flows. A local HTTP listener is fragile in CI/headless environments. This flow is rejected for all versions. The planned v2 OAuth implementation instead calls the Zoho OAuth2 API directly from the terminal process (client credentials or device-authorization grant), requiring only `--client-id` and `--client-secret` — no browser, no redirect listener, no callback URL, consistent with the non-goal of no browser-based auth flows.
 
 ### Environment variable only (no stored credentials)
 

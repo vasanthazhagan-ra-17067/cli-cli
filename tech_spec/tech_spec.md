@@ -14,12 +14,14 @@
 4. [CLI Structure & Commands](#4-cli-structure--commands)
 5. [Data Models](#5-data-models)
 6. [Authentication](#6-authentication)
-7. [Storage](#7-storage)
-8. [API Client](#8-api-client)
-9. [Output Contract](#9-output-contract)
-10. [Error Handling](#10-error-handling)
-11. [Dependencies](#11-dependencies)
-12. [Non-Goals (v1)](#12-non-goals-v1)
+7. [ZohoCorp Account Restriction](#7-zohocorp-account-restriction)
+8. [Storage](#8-storage)
+9. [API Client](#9-api-client)
+10. [Trace Sessions](#10-trace-sessions)
+11. [Output Contract](#11-output-contract)
+12. [Error Handling](#12-error-handling)
+13. [Dependencies](#13-dependencies)
+14. [Non-Goals (v1)](#14-non-goals-v1)
 
 ---
 
@@ -60,7 +62,11 @@ cliq-cli/
 │   │   └── Commands/
 │   │       ├── AccountCommands.cs            ← add, list, remove, show, set-default, re-auth
 │   │       ├── ScopeCommands.cs              ← add, remove, list
-│   │       └── ApiCommands.cs                ← api call
+│   │       ├── ApiCommands.cs                ← api call
+│   │       ├── ApiRegistryCommands.cs        ← api registry list/add/show/remove
+│   │       ├── PexCommands.cs                ← pex connect/send/drain/clear/listen/close
+│   │       ├── TraceCommands.cs              ← trace session start/list/export/close/remove
+│   │       └── UtilCommands.cs               ← util time-ms, util uuid
 │   │
 │   ├── CliqCli.Core/                         ← Domain logic (no CLI concerns)
 │   │   ├── CliqCli.Core.csproj
@@ -70,8 +76,16 @@ cliq-cli/
 │   │   ├── Accounts/
 │   │   │   ├── AccountStore.cs               ← JSON config read/write
 │   │   │   └── AccountConfig.cs              ← AccountEntry model + AccountsRoot DTO
-│   │   └── Api/
-│   │       └── ApiClient.cs                  ← HttpClient wrapper; injects auth header
+│   │   ├── Api/
+│   │   │   ├── ApiClient.cs                  ← HttpClient wrapper; injects auth header; host allowlist; writes trace entries
+│   │   │   └── ApiRegistry.cs                ← registry.json read/write
+│   │   ├── Pex/
+│   │   │   └── PexBuffer.cs                  ← per-account JSONL event buffer (future)
+│   │   └── Trace/
+│   │       ├── TraceSession.cs               ← session index read/write (sessions.json)
+│   │       ├── TraceWriter.cs                ← append-only JSONL writer for trace entries
+│   │       ├── TraceEntry.cs                 ← record types: ApiTraceEntry, PexTraceEntry
+│   │       └── TraceExporter.cs              ← reads JSONL, emits JSON array with optional filters
 │   │
 │   └── CliqCli.Keychain/                     ← OS keychain abstraction
 │       ├── CliqCli.Keychain.csproj
@@ -148,16 +162,12 @@ Adding or removing a scope sets `needs_reauth = true` on that account.
 
 ### Group: `api`
 
-| Subcommand | Flags | Description |
-|-----------|-------|-------------|
-| `call` | `--method` (req), `--path` (req), `[--body]`, `[--body-file]`, `[--header]` (repeatable), `[--query]` (repeatable), `[--account]` | Invoke a Cliq REST API endpoint |
-
-**`api call` flag details:**
+#### `api call`
 
 | Flag | Type | Description |
 |------|------|-------------|
-| `--method` | `GET\|POST\|PUT\|PATCH\|DELETE` | HTTP method |
-| `--path` | string | URL path, e.g. `/api/v2/channels` |
+| `--method` | `GET\|POST\|PUT\|PATCH\|DELETE` | HTTP method (required) |
+| `--path` | string | URL path, e.g. `/api/v2/channels` (required) |
 | `--body` | string | Inline JSON request body |
 | `--body-file` | string | Path to a JSON file to use as request body |
 | `--header` | `key:value` | Additional request header (repeatable) |
@@ -165,6 +175,25 @@ Adding or removing a scope sets `needs_reauth = true` on that account.
 | `--account` | string | Account override for this call |
 
 `--body` and `--body-file` are mutually exclusive. `/api/v2` prefix is inserted automatically if `--path` does not start with `/api/`.
+
+#### `api registry` *(Future)*
+
+| Subcommand | Flags | Description |
+|-----------|-------|-------------|
+| `list` | — | List all registered API entries |
+| `add` | `--id` (req), `--method` (req), `--url-template` (req), `--purpose` (req) | Upsert an endpoint entry (add or overwrite by id) |
+| `show` | `--id` (req) | Show a single entry by id |
+| `remove` | `--id` (req) | Delete an entry by id |
+
+Storage: `<configDir>/cliq-cli/registry.json` — same format as `CliqApiMcp`.
+
+```json
+{
+  "apis": [
+    { "id": "list-channels", "method": "GET", "urlTemplate": "/api/v2/channels", "purpose": "Returns all channels the authenticated user can access" }
+  ]
+}
+```
 
 ---
 
@@ -181,14 +210,39 @@ Adding or removing a scope sets `needs_reauth = true` on that account.
 
 ### Group: `pex` *(Future)*
 
-> Pex is Zoho Cliq's proprietary real-time protocol (ping-pong + chat message delivery).
+> Pex is Zoho Cliq's proprietary real-time protocol (ping-pong + chat message delivery). Events are buffered to a local JSONL file at `<configDir>/cliq-cli/pex-buffer/<account>.jsonl`. `drain` atomically reads and truncates this file.
 
 | Subcommand | Flags | Description |
 |-----------|-------|-------------|
-| `connect` | `--channel` (req), `[--account]` | Open a Pex session |
-| `send` | `--session` (req), `--message` (req) | Send a message over Pex |
-| `listen` | `--session` (req) | Stream incoming Pex messages to stdout as JSON lines |
-| `close` | `--session` (req) | Close the Pex session |
+| `connect` | `[--account]` | Open a Pex/WMS WebSocket for the named account |
+| `send` | `--message` (req), `[--account]` | Send a raw message over the Pex socket |
+| `drain` | `[--account]` | Return all buffered Pex callback events since last drain, then clear the buffer (JSON array to stdout); also appends pex entries to active trace session |
+| `clear` | `[--account]` | Discard buffered events without returning them |
+| `listen` | `[--account]` | Stream incoming Pex events to stdout as newline-delimited JSON (blocking, Ctrl+C to stop) |
+| `close` | `[--account]` | Close the Pex WebSocket for the named account |
+
+---
+
+### Group: `trace`
+
+> Session-scoped API call trace. One analysis run = one named session. `api call` and `pex drain` automatically append entries when a session is active — no `--trace` flag required.
+
+| Subcommand | Flags | Description |
+|-----------|-------|-------------|
+| `session start` | `--name` (req) | Create and activate a named trace session |
+| `session list` | — | List all sessions: name, start time, entry count, status |
+| `session export` | `--name` (req), `[--truncate-body <bytes>]`, `[--type api\|pex]` | Dump full session trace to stdout as JSON array (non-destructive) |
+| `session close` | `--name` (req) | Mark session inactive; file is preserved for export |
+| `session remove` | `--name` (req) | Delete session entry and all trace files |
+
+---
+
+### Group: `util`
+
+| Subcommand | Description |
+|-----------|-------------|
+| `time-ms` | Current UTC time as a Unix millisecond timestamp (`{"ts": 1710000000000}`) |
+| `uuid` | Generate a random UUID v4 |
 
 ---
 
@@ -201,6 +255,7 @@ public sealed record AccountEntry
 {
     public required string Name { get; init; }
     public required string Domain { get; init; }           // e.g. "zoho.com"
+    public string? Email { get; init; }                    // captured from Zoho user-info API at account add
     public List<string> Scopes { get; init; } = [];
     public required string TokenType { get; init; }        // "pat" | "oauth"
     public bool IsDefault { get; init; }
@@ -225,6 +280,7 @@ public sealed record AccountsRoot
     {
       "name": "work",
       "domain": "zoho.com",
+      "email": "user@example.com",
       "scopes": ["ZohoCliq.Channels.READ", "ZohoCliq.Messages.WRITE"],
       "token_type": "pat",
       "is_default": true,
@@ -233,6 +289,7 @@ public sealed record AccountsRoot
     {
       "name": "personal",
       "domain": "zoho.eu",
+      "email": "user@personal.com",
       "scopes": [],
       "token_type": "pat",
       "is_default": false,
@@ -243,6 +300,49 @@ public sealed record AccountsRoot
 ```
 
 JSON property names use `snake_case` (configured via `JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower`).
+
+### Trace Entry Models
+
+**`ApiTraceEntry`** — written by every `api call` when a session is active:
+
+```csharp
+public sealed record ApiTraceEntry
+{
+    public int Seq { get; init; }
+    public string Type => "api";
+    public required string Session { get; init; }
+    public required DateTimeOffset Timestamp { get; init; }
+    public int DurationMs { get; init; }
+    public required string Account { get; init; }
+    public required string Method { get; init; }
+    public required string Url { get; init; }
+    public Dictionary<string, string> RequestHeaders { get; init; } = [];   // Authorization excluded
+    public string? RequestBody { get; init; }
+    public int ResponseStatus { get; init; }
+    public Dictionary<string, string> ResponseHeaders { get; init; } = [];
+    public string? ResponseBody { get; init; }
+    public string? Error { get; init; }                                      // non-null on transport failure only
+}
+```
+
+**`PexTraceEntry`** — written for each event when `pex drain` is called with a session active:
+
+```csharp
+public sealed record PexTraceEntry
+{
+    public int Seq { get; init; }
+    public string Type => "pex";
+    public required string Session { get; init; }
+    public required DateTimeOffset Timestamp { get; init; }
+    public required string Account { get; init; }
+    public int? RelatedApiSeq { get; init; }    // seq of most recent api entry before this drain; null if none
+    public required string HandlerClass { get; init; }
+    public required string CallbackMethod { get; init; }
+    public required string Payload { get; init; }
+}
+```
+
+> `requestHeaders` in `ApiTraceEntry` always excludes the `Authorization` header — tokens are **never** written to the trace.
 
 ---
 
@@ -302,7 +402,54 @@ cliq-cli account re-auth --name "work"   [v2 OAuth only]
 
 ---
 
-## 7. Storage
+## 7. ZohoCorp Account Restriction
+
+> **Rationale:** ZohoCorp accounts (`*@zohocorp.com`) are internal employee accounts tied to Zoho's corporate infrastructure. Allowing a CLI tool — particularly one used by AI agents — to authenticate with, store credentials for, or make API calls on behalf of these accounts is an unacceptable privacy and security risk. All operations involving a ZohoCorp-domain account are hard-blocked at the earliest possible entry point.
+
+### Detection Rule
+
+An account is a ZohoCorp account when its email address domain's first label is `zohocorp` — i.e.:
+
+```csharp
+email.Split('@')[1].Split('.')[0]
+      .Equals("zohocorp", StringComparison.OrdinalIgnoreCase)
+```
+
+This covers `zohocorp.com`, `zohocorp.eu`, `zohocorp.in`, `zohocorp.com.au`, and all future datacenter TLDs automatically. The blocked-domain label list is a sealed compile-time constant in `CliqCli.Core` — not overridable at runtime.
+
+### Blocked Entry Points
+
+| Entry point | Check |
+|-------------|-------|
+| `account add` | Email fetched from Zoho user-info API before persisting; reject if ZohoCorp domain |
+| `api call` (active account) | Resolved account's stored email checked before any HTTP request is dispatched |
+| `api call --account <name>` | Same check applied to the named account override |
+| Any `scope` command | Account resolved first; reject if ZohoCorp domain |
+
+### Implementation
+
+- Check runs in `PatAuthProvider.StoreTokenAsync` and at the start of `ApiClient.CallAsync` — no future auth provider or command can bypass it inadvertently.
+- On `account add`, the email is retrieved from the Zoho user-info endpoint before the account is persisted, so the block applies even if the user does not supply their email explicitly.
+- The check must NOT be bypassable via flags, environment variables, or config.
+
+### Use Cases
+
+| ID | Scenario | Behaviour |
+|----|----------|-----------|
+| UC-24 | `account add` with a `@zohocorp.com` PAT | Rejected immediately; keychain write never happens; exit 1 `ACCOUNT_DOMAIN_BLOCKED` |
+| UC-25 | `api call` resolves to a ZohoCorp account | Rejected before any HTTP request; exit 1 `ACCOUNT_DOMAIN_BLOCKED` |
+| UC-26 | `scope add/remove/list` targets a ZohoCorp account | Rejected; no mutation to `accounts.json`; exit 1 `ACCOUNT_DOMAIN_BLOCKED` |
+| UC-27 | Existing `accounts.json` already contains a ZohoCorp account | Any command resolving to that account is rejected; warning emitted on startup |
+
+**Error output (stderr):**
+
+```json
+{ "error": "ZohoCorp accounts are not permitted. Use a personal or external Zoho account.", "code": "ACCOUNT_DOMAIN_BLOCKED", "exitCode": 1 }
+```
+
+---
+
+## 8. Storage
 
 ### Paths
 
@@ -319,6 +466,10 @@ Path resolution uses `Environment.GetFolderPath(Environment.SpecialFolder.Applic
 | File | Location | Format |
 |------|----------|--------|
 | `accounts.json` | `<configDir>/accounts.json` | Plain JSON, `snake_case` |
+| `registry.json` | `<configDir>/registry.json` | Plain JSON *(future)* |
+| Pex event buffer | `<configDir>/pex-buffer/<account>.jsonl` | Newline-delimited JSON *(future)* |
+| Trace index | `<configDir>/traces/sessions.json` | Plain JSON |
+| Trace entries | `<configDir>/traces/<session-name>/trace.jsonl` | Newline-delimited JSON (append-only) |
 | Secrets | OS Keychain | OS-managed, never on disk |
 | Keychain fallback | `<configDir>/keystore/<accountName>.bin` | AES-256 encrypted |
 
@@ -368,7 +519,22 @@ Runtime detection via `RuntimeInformation.IsOSPlatform(...)`. Fallback is used w
 
 ---
 
-## 8. API Client
+## 9. API Client
+
+### Host Allowlist
+
+Before every outgoing HTTP request `ApiClient` validates the resolved URL host against an allowlist. Any URL whose host does not end with one of the allowed suffixes is rejected with `HOST_NOT_ALLOWED`, exit 1.
+
+| Suffix | Covers |
+|--------|--------|
+| `zoho.com` | US/AU Cliq REST + Accounts |
+| `zoho.eu` | EU Cliq REST |
+| `zoho.in` | IN Cliq REST |
+| `zoho.com.au` | AU Cliq REST |
+| `zohoapis.com` | US Cliq API domain (some internal endpoints resolve here) |
+| `zohoapis.in` | IN Cliq API domain |
+
+The allowlist is a sealed compile-time constant — not configurable at runtime.
 
 ### `ApiClient`
 
@@ -414,7 +580,52 @@ account.Domain = "zoho.com"
 
 ---
 
-## 9. Output Contract
+## 10. Trace Sessions
+
+> During an API analysis session the agent fires API calls and drains Pex events. All calls are automatically recorded in a named session trace. After the session the agent exports the trace to a file for developer reference.
+
+### Design Principles
+
+- **Always-on when a session is active.** `api call` and `pex drain` automatically append entries — no `--trace` flag to forget.
+- **Named sessions.** One analysis run = one session identified by a developer-readable name (e.g. `Messages-2026-03-16`).
+- **Non-destructive export.** `trace session export` writes to stdout but does not delete the file; only `trace session remove` deletes it.
+- **Sequential numbering.** Every entry gets a monotonically increasing `seq` number.
+- **Fallback when no session is active.** Trace entries are silently dropped — no implicit session created.
+
+### Storage Layout
+
+```
+<configDir>/cliq-cli/traces/
+  sessions.json                 ← index: name, startTime, entryCount, status (active | closed)
+  <session-name>/
+    trace.jsonl                 ← one JSON object per line (append-only)
+```
+
+### Agent Workflow Integration
+
+```
+Phase 2 start:
+  cliq-cli trace session start --name "<FeatureName>-<YYYY-MM-DD>"
+
+... agent fires all api calls and pex drains — entries auto-appended ...
+
+Phase 2 complete:
+  cliq-cli trace session export --name "<FeatureName>-<YYYY-MM-DD>"
+    → agent captures stdout → saves to FeatureDocs/<FeatureName>/api-trace.json
+
+  cliq-cli trace session close  --name "<FeatureName>-<YYYY-MM-DD>"
+```
+
+### Export Options
+
+| Flag | Description |
+|------|-------------|
+| `--truncate-body <bytes>` | Truncate `requestBody` and `responseBody` per entry at export time (full fidelity preserved in `.jsonl`) |
+| `--type api\|pex` | Export only entries of the given type |
+
+---
+
+## 11. Output Contract
 
 All output goes through a central `IOutputWriter` interface so tests can capture it without console side effects.
 
@@ -456,6 +667,8 @@ Token value is **never** included in any output. `account show` displays `"token
 | `INVALID_ARGS` | 1 | Missing or conflicting flags |
 | `IO_ERROR` | 1 | File system failure (accounts.json read/write) |
 | `KEYCHAIN_ERROR` | 2 | OS keychain operation failed |
+| `ACCOUNT_DOMAIN_BLOCKED` | 1 | Account email is a ZohoCorp domain |
+| `HOST_NOT_ALLOWED` | 1 | Outgoing URL host not in the allowlist |
 
 ### Exit Codes
 
@@ -467,7 +680,7 @@ Token value is **never** included in any output. `account show` displays `"token
 
 ---
 
-## 10. Error Handling
+## 12. Error Handling
 
 - All exceptions are caught at the top-level command executor and converted to the JSON error envelope written to stderr.
 - `--no-input` flag: any code path that would prompt must throw `InvalidOperationException` with code `INVALID_ARGS` instead.
@@ -476,7 +689,7 @@ Token value is **never** included in any output. `account show` displays `"token
 
 ---
 
-## 11. Dependencies
+## 13. Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
@@ -493,13 +706,15 @@ No external keychain NuGet — platform keychain access is implemented via direc
 
 ---
 
-## 12. Non-Goals (v1)
+## 14. Non-Goals (v1)
 
 - No OAuth2 implementation — PAT only.
 - No browser-based auth or redirect flows.
-- No WebSocket or Pex support.
+- No WebSocket or Pex support (future Epics 4 & 5).
+- No API Registry (future Epic 7).
 - No TUI / interactive shell mode.
 - No plugin system or extensibility hooks.
 - No Native AOT publishing.
 - No multi-account simultaneous API calls (one active account per invocation).
 - No sync/caching layer — all API calls are live.
+- `trace` and `util` commands are implemented in v1; `pex`, `ws`, and `api registry` are deferred.
