@@ -104,5 +104,45 @@
       "tests": "6 passing (1 placeholder + 5 output writer tests)",
       "commandsWorking": ["cliq-cli --help", "cliq-cli --version"]
     }
+  },
+  {
+    "storyId": 3,
+    "title": "AccountStore + PatAuthProvider + ZohoCorp Block",
+    "status": "Completed",
+    "completedDate": "2026-03-16",
+    "filesCreatedOrModified": [
+      { "path": "src/CliqCli.Core/Accounts/AccountEntry.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/Accounts/AccountsRoot.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/Accounts/IAccountStore.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/Accounts/AccountStore.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/ZohoCorpGuard.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/Auth/IAuthProvider.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/Auth/PatAuthProvider.cs", "action": "created" },
+      { "path": "src/CliqCli/Program.cs", "action": "modified" },
+      { "path": "src/CliqCli.Core/CliqCli.Core.csproj", "action": "modified" },
+      { "path": "tests/CliqCli.Tests/AccountStoreTests.cs", "action": "created" },
+      { "path": "tests/CliqCli.Tests/PatAuthProviderTests.cs", "action": "created" }
+    ],
+    "keyDecisionsMade": [
+      "IAuthProvider.StoreTokenAsync includes optional string? email parameter so PatAuthProvider can apply ZohoCorp block — email is not in the base ADR-0005 interface definition but is needed for the block to be enforced at the auth layer.",
+      "AccountStore has an internal constructor accepting configDir for testability. InternalsVisibleTo('CliqCli.Tests') added to CliqCli.Core.csproj via AssemblyAttribute item group.",
+      "ZohoCorpGuard is internal static in CliqCli.Core namespace — satisfies ADR-0006 sealed/non-overridable requirement. AssertNotZohoCorp(null) is a no-op.",
+      "AccountStore.GetDefaultAsync returns the first account marked IsDefault, falling back to the first account in the list if none is marked. If the list is empty it throws NO_DEFAULT_ACCOUNT.",
+      "AccountStore.ApplyWindowsAcl method annotated [SupportedOSPlatform('windows')] and called inside if (OperatingSystem.IsWindows()) — satisfies CA1416 without pragma suppression.",
+      "TokenType property in AccountEntry serializes as 'token_type' (not 'token') — the no-token test was updated to check for '\"token\":' exact property key rather than the substring 'token'."
+    ],
+    "openQuestionsResolved": [
+      { "id": "OQ-004", "resolution": "Used FileSecurity + SetAccessRule with current user WindowsIdentity to restrict NTFS ACL. Wrapped in try/catch with ILogger<AccountStore> warning on failure per default assumption." },
+      { "id": "OQ-005", "resolution": "ZohoCorp check applied in PatAuthProvider.StoreTokenAsync and will be applied in ApiClient (Story 5). Scope commands will check in the command layer (Story 5+)." }
+    ],
+    "issuesEncountered": [
+      { "issue": "AccountStore internal constructor not visible to test project.", "resolution": "Added InternalsVisibleTo('CliqCli.Tests') via AssemblyAttribute in CliqCli.Core.csproj." },
+      { "issue": "Test 'AccountsJson_DoesNotContainToken' failed because 'token_type' contains substring 'token'.", "resolution": "Changed assertion to check for '\"token\":' exact property key, confirming only the designated token_type field is present." }
+    ],
+    "stateAfterStory": {
+      "build": "passing",
+      "tests": "25 passing",
+      "commandsWorking": ["cliq-cli --help", "cliq-cli --version"]
+    }
   }
 ]

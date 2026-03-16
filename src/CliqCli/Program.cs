@@ -1,5 +1,7 @@
 using System.Reflection;
 using CliqCli.Core;
+using CliqCli.Core.Accounts;
+using CliqCli.Core.Auth;
 using CliqCli.Keychain;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -30,6 +32,10 @@ internal static class Program
         // Keychain: select best available provider for this platform
         services.AddSingleton<IKeychainProvider>(_ =>
             KeychainProviderFactory.Create());
+
+        // Account store and auth provider
+        services.AddSingleton<IAccountStore, AccountStore>();
+        services.AddSingleton<IAuthProvider, PatAuthProvider>();
 
         // Logging: Warning+ to stderr only so JSON stdout contract is never broken
         services.AddLogging(logging =>

@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleToAttribute("CliqCli.Tests")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("CliqCli.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+309e0dd6f1b28b1901e0f8f6f52ec4b8e7b7764a")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+04db7c13a3972b57d86dbdc085822d34f90dd114")]
 [assembly: System.Reflection.AssemblyProductAttribute("CliqCli.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CliqCli.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
