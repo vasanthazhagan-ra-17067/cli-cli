@@ -1,0 +1,156 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "cliq-cli/1.0.0": {
+        "dependencies": {
+          "CliqCli.Core": "1.0.0",
+          "CliqCli.Keychain": "1.0.0",
+          "Microsoft.Extensions.DependencyInjection": "10.0.0",
+          "Spectre.Console.Cli": "0.49.1"
+        },
+        "runtime": {
+          "cliq-cli.dll": {}
+        }
+      },
+      "Microsoft.Extensions.DependencyInjection/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.DependencyInjection.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.DependencyInjection.Abstractions/10.0.0": {
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.Logging.Abstractions/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Logging.Abstractions.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Spectre.Console/0.49.1": {
+        "runtime": {
+          "lib/net8.0/Spectre.Console.dll": {
+            "assemblyVersion": "0.0.0.0",
+            "fileVersion": "0.49.1.0"
+          }
+        }
+      },
+      "Spectre.Console.Cli/0.49.1": {
+        "dependencies": {
+          "Spectre.Console": "0.49.1"
+        },
+        "runtime": {
+          "lib/net8.0/Spectre.Console.Cli.dll": {
+            "assemblyVersion": "0.0.0.0",
+            "fileVersion": "0.49.1.0"
+          }
+        },
+        "resources": {
+          "lib/net8.0/de/Spectre.Console.Cli.resources.dll": {
+            "locale": "de"
+          },
+          "lib/net8.0/fr/Spectre.Console.Cli.resources.dll": {
+            "locale": "fr"
+          },
+          "lib/net8.0/sv/Spectre.Console.Cli.resources.dll": {
+            "locale": "sv"
+          }
+        }
+      },
+      "CliqCli.Core/1.0.0": {
+        "dependencies": {
+          "CliqCli.Keychain": "1.0.0",
+          "Microsoft.Extensions.DependencyInjection": "10.0.0",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
+        },
+        "runtime": {
+          "CliqCli.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "CliqCli.Keychain/1.0.0": {
+        "runtime": {
+          "CliqCli.Keychain.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "cliq-cli/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.Extensions.DependencyInjection/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-f0RBabswJq+gRu5a+hWIobrLWiUYPKMhCD9WO3sYBAdSy3FFH14LMvLVFZc2kPSCimBLxSuitUhsd6tb0TAY6A==",
+      "path": "microsoft.extensions.dependencyinjection/10.0.0",
+      "hashPath": "microsoft.extensions.dependencyinjection.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.DependencyInjection.Abstractions/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-L3AdmZ1WOK4XXT5YFPEwyt0ep6l8lGIPs7F5OOBZc77Zqeo01Of7XXICy47628sdVl0v/owxYJTe86DTgFwKCA==",
+      "path": "microsoft.extensions.dependencyinjection.abstractions/10.0.0",
+      "hashPath": "microsoft.extensions.dependencyinjection.abstractions.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Logging.Abstractions/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-FU/IfjDfwaMuKr414SSQNTIti/69bHEMb+QKrskRb26oVqpx3lNFXMjs/RC9ZUuhBhcwDM2BwOgoMw+PZ+beqQ==",
+      "path": "microsoft.extensions.logging.abstractions/10.0.0",
+      "hashPath": "microsoft.extensions.logging.abstractions.10.0.0.nupkg.sha512"
+    },
+    "Spectre.Console/0.49.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-USV+pdu49OJ3nCjxNuw1K9Zw/c1HCBbwbjXZp0EOn6wM99tFdAtN34KEBZUMyRuJuXlUMDqhd8Yq9obW2MslYA==",
+      "path": "spectre.console/0.49.1",
+      "hashPath": "spectre.console.0.49.1.nupkg.sha512"
+    },
+    "Spectre.Console.Cli/0.49.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-wBZzyEbKqfPFFUPhV5E7/k4Kwy4UDO42IVzvzk0C4Pkjjw+NSd0EOBkIutYET4vJY4X81pD9ooQO9gfBGXj4+g==",
+      "path": "spectre.console.cli/0.49.1",
+      "hashPath": "spectre.console.cli.0.49.1.nupkg.sha512"
+    },
+    "CliqCli.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "CliqCli.Keychain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

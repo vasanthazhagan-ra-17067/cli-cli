@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "yWR5+bAHX74=",
+  "success": true,
+  "projectFilePath": "/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/CliqCli.Core.csproj",
+  "expectedPackageFiles": [
+    "/Users/vasanth-17067/.nuget/packages/microsoft.extensions.dependencyinjection/10.0.0/microsoft.extensions.dependencyinjection.10.0.0.nupkg.sha512",
+    "/Users/vasanth-17067/.nuget/packages/microsoft.extensions.dependencyinjection.abstractions/10.0.0/microsoft.extensions.dependencyinjection.abstractions.10.0.0.nupkg.sha512",
+    "/Users/vasanth-17067/.nuget/packages/microsoft.extensions.logging.abstractions/10.0.0/microsoft.extensions.logging.abstractions.10.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,0 +1,12 @@
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/obj/Debug/net10.0/CliqCli.Keychain.GeneratedMSBuildEditorConfig.editorconfig
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/obj/Debug/net10.0/CliqCli.Keychain.AssemblyInfoInputs.cache
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/obj/Debug/net10.0/CliqCli.Keychain.AssemblyInfo.cs
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/obj/Debug/net10.0/CliqCli.Keychain.csproj.CoreCompileInputs.cache
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/obj/Debug/net10.0/CliqCli.Keychain.sourcelink.json
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/bin/Debug/net10.0/CliqCli.Keychain.deps.json
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/bin/Debug/net10.0/CliqCli.Keychain.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/bin/Debug/net10.0/CliqCli.Keychain.pdb
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/obj/Debug/net10.0/CliqCli.Keychain.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/obj/Debug/net10.0/refint/CliqCli.Keychain.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/obj/Debug/net10.0/CliqCli.Keychain.pdb
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Keychain/obj/Debug/net10.0/ref/CliqCli.Keychain.dll

@@ -1,0 +1,16 @@
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/bin/Debug/net10.0/CliqCli.Core.deps.json
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/bin/Debug/net10.0/CliqCli.Core.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/bin/Debug/net10.0/CliqCli.Core.pdb
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/bin/Debug/net10.0/CliqCli.Keychain.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/bin/Debug/net10.0/CliqCli.Keychain.pdb
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/CliqCli.Core.csproj.AssemblyReference.cache
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/CliqCli.Core.GeneratedMSBuildEditorConfig.editorconfig
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/CliqCli.Core.AssemblyInfoInputs.cache
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/CliqCli.Core.AssemblyInfo.cs
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/CliqCli.Core.csproj.CoreCompileInputs.cache
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/CliqCli.Core.sourcelink.json
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/CliqCli..718C135D.Up2Date
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/CliqCli.Core.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/refint/CliqCli.Core.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/CliqCli.Core.pdb
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli.Core/obj/Debug/net10.0/ref/CliqCli.Core.dll

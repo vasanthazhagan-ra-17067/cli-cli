@@ -1,1 +1,65 @@
-[]
+[
+  {
+    "storyId": 1,
+    "title": "Three-Project Solution Scaffold + IKeychainProvider",
+    "status": "Completed",
+    "completedDate": "2026-03-16",
+    "filesCreatedOrModified": [
+      { "path": "src/cliq-cli.sln", "action": "created" },
+      { "path": "src/CliqCli/CliqCli.csproj", "action": "created" },
+      { "path": "src/CliqCli/Program.cs", "action": "created" },
+      { "path": "src/CliqCli/DependencyInjectionRegistrar.cs", "action": "created" },
+      { "path": "src/CliqCli/Properties/PublishProfiles/osx-arm64.pubxml", "action": "created" },
+      { "path": "src/CliqCli.Core/CliqCli.Core.csproj", "action": "created" },
+      { "path": "src/CliqCli.Keychain/CliqCli.Keychain.csproj", "action": "created" },
+      { "path": "src/CliqCli.Keychain/IKeychainProvider.cs", "action": "created" },
+      { "path": "src/CliqCli.Keychain/MacOsKeychainProvider.cs", "action": "created" },
+      { "path": "src/CliqCli.Keychain/WindowsKeychainProvider.cs", "action": "created" },
+      { "path": "src/CliqCli.Keychain/LinuxKeychainProvider.cs", "action": "created" },
+      { "path": "src/CliqCli.Keychain/EncryptedFileKeychainProvider.cs", "action": "created" },
+      { "path": "src/CliqCli.Keychain/KeychainProviderFactory.cs", "action": "created" },
+      { "path": "tests/CliqCli.Tests/CliqCli.Tests.csproj", "action": "created" },
+      { "path": "tests/CliqCli.Tests/Fakes/InMemoryKeychainProvider.cs", "action": "created" },
+      { "path": "tests/CliqCli.Tests/PlaceholderTests.cs", "action": "created" }
+    ],
+    "keyDecisionsMade": [
+      "Used OperatingSystem.IsMacOS()/IsWindows()/IsLinux() instead of RuntimeInformation.IsOSPlatform() in KeychainProviderFactory.Create() and EncryptedFileKeychainProvider — the Roslyn CA1416 analyzer only recognises OperatingSystem.IsXxx() as valid platform guards, not RuntimeInformation.",
+      "Added [SupportedOSPlatform] attributes to the TryCreateMacOs, TryCreateWindows, TryCreateLinux, and GetWindowsMachineGuid helper methods to satisfy CA1416 with TreatWarningsAsErrors=true.",
+      "Created DependencyInjectionRegistrar.cs in CliqCli project to bridge Microsoft.Extensions.DependencyInjection with Spectre.Console.Cli's ITypeRegistrar — required for DI to work with the command app.",
+      "Used dotnet new sln --format sln to create the .sln file (not .slnx) as .NET 10 defaults to .slnx but the story specifies .sln.",
+      "EncryptedFileKeychainProvider key derivation: SHA-256(MachineName + MachineGuid + 'cliq-cli') per OQ-002 default.",
+      "EncryptedFileKeychainProvider file layout: [12-byte IV][ciphertext][16-byte GCM tag], stored at <configDir>/keystore/<sanitized-key>.bin where ':' is replaced with '_'.",
+      "LinuxKeychainProvider uses TryCreate() factory pattern — catches DllNotFoundException on libsecret-1.so.0 load failure, performs a sentinel probe lookup on init, returns false to activate fallback.",
+      "CliqCli.Core.csproj references Microsoft.Extensions.DependencyInjection 10.0.0 — packages at version 10 are available with .NET 10 SDK 10.0.105."
+    ],
+    "openQuestionsResolved": [
+      {
+        "id": "OQ-002",
+        "resolution": "Followed default assumption: SHA256(MachineName + MachineGuid + 'cliq-cli'). MachineGuid obtained via ioreg on macOS, Windows Registry on Windows, /etc/machine-id on Linux. IV stored as first 12 bytes of .bin file, ciphertext + 16-byte tag follow."
+      },
+      {
+        "id": "OQ-003",
+        "resolution": "Followed default assumption: libsecret-1 via P/Invoke with fixed 2-attribute schema (application=cliq-cli, key=<keystring>). TryCreate() catches DllNotFoundException and init probe errors; returns false to trigger EncryptedFileKeychainProvider fallback. CallingConvention.Cdecl used for variadic P/Invoke signatures."
+      }
+    ],
+    "issuesEncountered": [
+      {
+        "issue": "CA1416 platform compatibility errors with TreatWarningsAsErrors=true: RuntimeInformation.IsOSPlatform() is not recognised as a platform guard by the Roslyn analyzer.",
+        "resolution": "Replaced all RuntimeInformation.IsOSPlatform() calls with OperatingSystem.IsMacOS(), OperatingSystem.IsWindows(), OperatingSystem.IsLinux(). Added [SupportedOSPlatform] attributes to the platform-specific helper methods."
+      },
+      {
+        "issue": "dotnet new sln in .NET 10 creates .slnx by default, not .sln.",
+        "resolution": "Used dotnet new sln --format sln flag to force the legacy .sln format as specified in the story."
+      },
+      {
+        "issue": "Unused using directives (System.Runtime.InteropServices, System.Text.Json) in EncryptedFileKeychainProvider would cause warnings with TreatWarningsAsErrors.",
+        "resolution": "Removed unused using directives."
+      }
+    ],
+    "stateAfterStory": {
+      "build": "passing",
+      "tests": "1 passing (placeholder), N/A for domain tests",
+      "commandsWorking": []
+    }
+  }
+]
