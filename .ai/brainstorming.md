@@ -434,6 +434,112 @@ All scope commands operate on a specific account. `--account` defaults to the ac
 
 ---
 
+### Epic 9 — Trace Sessions
+
+> During an API analysis session the agent fires dozens of API calls and drains PEX events. The CLI must automatically record every call — request params, response status, response body, timing — in a named session trace. After the session concludes the agent exports the trace to a file for developer reference and post-mortem debugging.
+>
+> **Origin:** The `CliqApiMcp` macOS app already had `APILogEntry` / `APILogEvent` models that captured the same data per request; the log was displayed in a macOS window UI. The CLI replaces that UI-only log with a persistent, exportable, session-scoped file.
+
+#### Design principles
+
+- **Passive — always-on when a session is active.** `api call` and `pex drain` automatically append a trace entry. There is no `--trace` flag to forget.
+- **Named sessions.** One analysis run = one session, identified by a developer-readable name (e.g. `Messages-2026-03-16`). Sessions do not pollute each other.
+- **Non-destructive export.** `trace session export` writes the session to stdout but does not delete the file. The file is only removed by `trace session remove`. Developers can re-export or re-inspect at any time.
+- **Two entry types.** `"api"` entries (from `api call`) and `"pex"` entries (from `pex drain`). PEX entries carry a `relatedApiSeq` back-reference to the API call that preceded the drain, enabling correlation.
+- **Sequential numbering.** Every entry in a session gets a monotonically increasing `seq` number — useful for reading the trace in execution order without parsing timestamps.
+
+#### Storage
+
+```
+<configDir>/cliq-cli/traces/
+  sessions.json               ← index: name, startTime, entryCount, status (active | closed)
+  <session-name>/
+    trace.jsonl               ← one JSON object per line (append-only)
+```
+
+`trace.jsonl` is append-only during a session. Export reads it sequentially and emits a JSON array to stdout.
+
+#### Trace entry schemas
+
+**`"api"` entry** — written by every `api call` when a session is active:
+
+```json
+{
+  "seq": 1,
+  "type": "api",
+  "session": "Messages-2026-03-16",
+  "timestamp": "2026-03-16T10:23:45.123Z",
+  "durationMs": 342,
+  "account": "cliqautomation1",
+  "method": "POST",
+  "url": "https://cliq.zoho.com/api/v2/chats",
+  "requestHeaders": { "Content-Type": "application/json" },
+  "requestBody": "{\"name\":\"TestGroup\"}",
+  "responseStatus": 200,
+  "responseHeaders": { "Content-Type": "application/json" },
+  "responseBody": "{\"data\":{\"id\":\"abc123\"}}",
+  "error": null
+}
+```
+
+- `error` is non-null only on a network/transport failure (distinguished from an HTTP error response, which is captured in `responseStatus` + `responseBody`).
+- `requestHeaders` excludes the `Authorization` header — tokens are **never** written to the trace.
+
+**`"pex"` entry** — written for each event when `pex drain` is called with a session active:
+
+```json
+{
+  "seq": 3,
+  "type": "pex",
+  "session": "Messages-2026-03-16",
+  "timestamp": "2026-03-16T10:23:47.891Z",
+  "account": "cliqautomation1",
+  "relatedApiSeq": 2,
+  "handlerClass": "ChatHandler",
+  "callbackMethod": "onMessageReceived",
+  "payload": "{...}"
+}
+```
+
+- `relatedApiSeq` is the `seq` of the most recent `"api"` entry before this PEX drain — the correlation link used by developers to answer "which API triggered this PEX event?". Set to `null` if no API call preceded the drain in this session.
+
+#### Use cases
+
+| ID | Command | Description |
+|----|---------|-------------|
+| UC-36 | `cliq-cli trace session start --name "Messages-2026-03-16"` | Create and activate a named trace session; all subsequent `api call` and `pex drain` commands auto-append entries |
+| UC-37 | `cliq-cli trace session list` | List all sessions: name, start time, entry count, status |
+| UC-38 | `cliq-cli trace session export --name "Messages-2026-03-16"` | Dump the full session trace to stdout as a JSON array (non-destructive; agent pipes to a file) |
+| UC-39 | `cliq-cli trace session close --name "Messages-2026-03-16"` | Mark session inactive — stops auto-appending; file preserved for export |
+| UC-40 | `cliq-cli trace session remove --name "Messages-2026-03-16"` | Delete session entry and all trace files for that session |
+
+**Optional export flags:**
+- `--truncate-body <bytes>` — truncate `requestBody` and `responseBody` to at most `<bytes>` characters per entry (useful when responses are large HTML error pages).
+- `--type api|pex` — export only entries of a given type.
+
+#### Fallback when no session is active
+
+If no session has been started and `api call` is invoked, trace entries are silently dropped (no implicit session created). This preserves the lightweight CLI experience for non-analysis uses and avoids accumulating unbounded trace files without agent lifecycle management.
+
+#### Agent workflow integration
+
+```
+Phase 2 start:
+  cliq-cli trace session start --name "<FeatureName>-<YYYY-MM-DD>"
+
+... agent fires all api calls and pex drains — entries auto-appended ...
+
+Phase 2 complete:
+  cliq-cli trace session export --name "<FeatureName>-<YYYY-MM-DD>"
+    → agent captures stdout → saves to FeatureDocs/<FeatureName>/api-trace.json
+
+  cliq-cli trace session close --name "<FeatureName>-<YYYY-MM-DD>"
+```
+
+The agent should update the `HttpApiAnalysisAgent` workflow instructions to include these three steps (start at Phase 2 entry, export + close at Phase 2 exit).
+
+---
+
 ```
 cliq-cli [--account <name>] [--json] [--no-input] [--help] [--version]
          <group> <subcommand> [flags]
@@ -443,6 +549,7 @@ Groups:
   scope     Manage OAuth scopes per account (--account to target a specific account)
   api       Invoke Cliq REST API endpoints; manage local API registry
   pex       (future) Pex/WMS real-time WebSocket sessions
+  trace     Session-scoped API call trace (start, export, close, remove)
   util      Utility helpers for agents (timestamps, UUIDs, etc.)
   ws        (future) Generic WebSocket connections
 
@@ -463,10 +570,19 @@ api subcommands:
 pex subcommands:
   pex connect          Open a Pex/WMS WebSocket for an account
   pex send             Send a raw message over the socket
-  pex drain            Return + clear the buffered event log
+  pex drain            Return + clear the buffered event log (also appends pex entries to active trace session)
   pex clear            Discard buffered events without returning them
   pex listen           Stream events to stdout as newline-delimited JSON (blocking)
   pex close            Close the socket
+
+trace subcommands:
+  trace session start  --name <name>           Create & activate a named trace session
+  trace session list                           List all sessions (name, start time, count, status)
+  trace session export --name <name>           Dump full session trace to stdout as JSON array
+                        [--truncate-body <n>]  Optionally truncate request/response bodies
+                        [--type api|pex]       Optionally filter by entry type
+  trace session close  --name <name>           Deactivate session; file preserved
+  trace session remove --name <name>           Delete session + all trace files
 
 util subcommands:
   util time-ms         Current UTC time as a millisecond epoch timestamp
@@ -504,6 +620,7 @@ cliq-cli/
 │   │       ├── ApiCommands.cs           ← api call
 │   │       ├── ApiRegistryCommands.cs   ← api registry list/add/show/remove
 │   │       ├── PexCommands.cs           ← pex connect/send/drain/clear/listen/close
+│   │       ├── TraceCommands.cs         ← trace session start/list/export/close/remove
 │   │       └── UtilCommands.cs          ← util time-ms, util uuid
 │   │
 │   ├── CliqCli.Core/                    ← Domain logic (no CLI concerns)
@@ -514,10 +631,15 @@ cliq-cli/
 │   │   │   ├── AccountStore.cs          ← JSON config read/write
 │   │   │   └── AccountConfig.cs         ← Model: account metadata + DTO
 │   │   ├── Api/
-│   │   │   ├── ApiClient.cs             ← HttpClient wrapper; injects auth header; host allowlist
+│   │   │   ├── ApiClient.cs             ← HttpClient wrapper; injects auth header; host allowlist; writes trace entries
 │   │   │   └── ApiRegistry.cs           ← registry.json read/write
-│   │   └── Pex/
-│   │       └── PexBuffer.cs             ← per-account JSONL event buffer (future)
+│   │   ├── Pex/
+│   │   │   └── PexBuffer.cs             ← per-account JSONL event buffer (future)
+│   │   └── Trace/
+│   │       ├── TraceSession.cs          ← session index read/write (sessions.json)
+│   │       ├── TraceWriter.cs           ← append-only JSONL writer for trace entries
+│   │       ├── TraceEntry.cs            ← record types: ApiTraceEntry, PexTraceEntry
+│   │       └── TraceExporter.cs         ← reads JSONL, emits JSON array with optional filters
 │   │
 │   └── CliqCli.Keychain/                ← OS keychain abstraction
 │       ├── IKeychainProvider.cs
@@ -557,3 +679,8 @@ cliq-cli/
    > - Windows: same via `winget` or direct binary download
 5. **datacenter auto-detection** — When adding an account, consider auto-detecting the datacenter from the token/user info API response instead of requiring manual `--domain` input.
 6. **blocked-domain list extensibility** — The current design blocks all accounts whose email domain's first label is `zohocorp` (covering `zohocorp.com`, `zohocorp.eu`, `zohocorp.in`, `zohocorp.com.au`, etc.). Decide whether the list of blocked org-domain labels should remain a single sealed constant (`["zohocorp"]`) or be extended to cover other internal org domains in future, via a compile-time list that is still not overridable at runtime by end users.
+7. **Update `HttpApiAnalysisAgent` instructions** — Once `cliq-cli` is available, the agent at `Cliq_Mac/native/Cliq/.github/agents/HttpApiAnalysisAgent.agent.md` must be updated to replace MCP tool calls with CLI invocations and to include the three trace lifecycle steps:
+   - Phase 2 entry: `cliq-cli trace session start --name "<FeatureName>-<YYYY-MM-DD>"`
+   - Phase 2 exit: `cliq-cli trace session export --name "..." > FeatureDocs/<FeatureName>/api-trace.json`
+   - Phase 2 exit: `cliq-cli trace session close --name "..."`
+8. **Trace body size limits** — Decide the default behaviour when `--truncate-body` is not specified. Options: (a) no truncation (full fidelity, large files), (b) default truncate at 8 KB per entry, (c) truncate only on export, not during write. Recommended default: write full body to `.jsonl`, apply truncation only at export time — preserves full fidelity in storage and gives the agent control at export.
