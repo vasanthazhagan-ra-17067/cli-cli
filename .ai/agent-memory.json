@@ -144,5 +144,57 @@
       "tests": "25 passing",
       "commandsWorking": ["cliq-cli --help", "cliq-cli --version"]
     }
+  },
+  {
+    "storyId": 4,
+    "title": "Account Command Group",
+    "status": "Completed",
+    "completedDate": "2026-03-16",
+    "filesCreatedOrModified": [
+      { "path": "src/CliqCli.Core/Auth/IUserInfoService.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/Auth/UserInfoService.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/Accounts/AccountDtos.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/Accounts/IAccountService.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/Accounts/AccountService.cs", "action": "created" },
+      { "path": "src/CliqCli/Commands/AccountCommands.cs", "action": "created" },
+      { "path": "src/CliqCli/Program.cs", "action": "modified" },
+      { "path": "tests/CliqCli.Tests/Fakes/FakeUserInfoService.cs", "action": "created" },
+      { "path": "tests/CliqCli.Tests/AccountServiceTests.cs", "action": "created" }
+    ],
+    "keyDecisionsMade": [
+      "Extracted all account business logic into IAccountService / AccountService in CliqCli.Core, keeping command classes thin (ADR-0009). Commands only: validate flags, call service, write output.",
+      "Introduced IUserInfoService / UserInfoService in CliqCli.Core/Auth/ for the Zoho user-info API call (GET https://accounts.{domain}/oauth/user/info). UserInfoService takes HttpClient via constructor injection; HttpClient registered as a singleton in Program.cs without needing Microsoft.Extensions.Http.",
+      "SSRF prevention: AccountService.AddAsync validates --domain against a compile-time set of known Zoho datacenter domains (zoho.com, zoho.eu, zoho.in, zoho.com.au, zoho.jp). Unknown domains throw INVALID_ARGS before any HTTP call is made.",
+      "Output DTOs in AccountDtos.cs: AccountAddResult (name+domain only, matches AC exactly), AccountListItem (scope_count computed, no token field), AccountShowDetail (token field always '***').",
+      "ReAuthAccountCommand returns NOT_IMPLEMENTED with exit 1 and has no IAccountService dependency.",
+      "Tests cover AccountService directly since the test project does not reference CliqCli.csproj. All story ACs verified via AccountServiceTests (45 tests passing total)."
+    ],
+    "openQuestionsResolved": [
+      {
+        "id": "OQ-001",
+        "resolution": "Followed default assumption: GET https://accounts.{domain}/oauth/user/info with Authorization: Zoho-oauthtoken <token>. JSON response 'Email' field. 401 -> AUTH_FAILURE (exit 2). Network error / timeout -> IO_ERROR (exit 1). Implemented in UserInfoService."
+      }
+    ],
+    "issuesEncountered": [
+      {
+        "issue": "ValidationResult not found despite 'using Spectre.Console.Cli;' in AccountCommands.cs.",
+        "resolution": "ValidationResult is in the Spectre.Console namespace (base package), not Spectre.Console.Cli. Added 'using Spectre.Console;' to AccountCommands.cs."
+      }
+    ],
+    "stateAfterStory": {
+      "build": "passing",
+      "tests": "45 passing",
+      "commandsWorking": [
+        "cliq-cli --help",
+        "cliq-cli --version",
+        "cliq-cli account --help",
+        "cliq-cli account add --help",
+        "cliq-cli account list",
+        "cliq-cli account show --name <name>",
+        "cliq-cli account remove --name <name>",
+        "cliq-cli account set-default --name <name>",
+        "cliq-cli account re-auth --name <name>"
+      ]
+    }
   }
 ]

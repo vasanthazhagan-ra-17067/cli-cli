@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CliqCli.Keychain")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+04db7c13a3972b57d86dbdc085822d34f90dd114")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e037c4645c6f8019c65221c63787a3d797452b34")]
 [assembly: System.Reflection.AssemblyProductAttribute("CliqCli.Keychain")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CliqCli.Keychain")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

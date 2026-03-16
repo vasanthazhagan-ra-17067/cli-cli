@@ -1,4 +1,5 @@
 using System.Reflection;
+using CliqCli.Commands;
 using CliqCli.Core;
 using CliqCli.Core.Accounts;
 using CliqCli.Core.Auth;
@@ -33,9 +34,16 @@ internal static class Program
         services.AddSingleton<IKeychainProvider>(_ =>
             KeychainProviderFactory.Create());
 
-        // Account store and auth provider
+        // HTTP client for outbound requests (user-info API during account add)
+        services.AddSingleton<HttpClient>();
+
+        // Account store, user-info lookup, and auth provider
         services.AddSingleton<IAccountStore, AccountStore>();
+        services.AddSingleton<IUserInfoService, UserInfoService>();
         services.AddSingleton<IAuthProvider, PatAuthProvider>();
+
+        // Account service — orchestrates IAccountStore + IAuthProvider + IUserInfoService
+        services.AddSingleton<IAccountService, AccountService>();
 
         // Logging: Warning+ to stderr only so JSON stdout contract is never broken
         services.AddLogging(logging =>
@@ -54,6 +62,23 @@ internal static class Program
         {
             config.SetApplicationName("cliq-cli");
             config.ValidateExamples();
+
+            // ─── account commands ─────────────────────────────────────────────────
+            config.AddBranch("account", account =>
+            {
+                account.AddCommand<AccountCommands.AddAccountCommand>("add")
+                    .WithDescription("Add a Zoho Cliq account using a Personal Access Token.");
+                account.AddCommand<AccountCommands.ListAccountsCommand>("list")
+                    .WithDescription("List all configured accounts.");
+                account.AddCommand<AccountCommands.ShowAccountCommand>("show")
+                    .WithDescription("Show details for a named account.");
+                account.AddCommand<AccountCommands.RemoveAccountCommand>("remove")
+                    .WithDescription("Remove an account from the keychain and accounts.json.");
+                account.AddCommand<AccountCommands.SetDefaultAccountCommand>("set-default")
+                    .WithDescription("Set the named account as the default.");
+                account.AddCommand<AccountCommands.ReAuthAccountCommand>("re-auth")
+                    .WithDescription("Re-authenticate an account (v1 stub — not yet supported).");
+            });
 
             config.SetExceptionHandler((ex, resolver) =>
             {
