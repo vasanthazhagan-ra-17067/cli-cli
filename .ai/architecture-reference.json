@@ -1,0 +1,250 @@
+{
+  "commandTree": {
+    "root": "cliq-cli [--account <name>] [--json] [--no-input] [--help] [--version]",
+    "groups": {
+      "account": {
+        "subcommands": [
+          { "name": "add",         "flags": ["--name (req)", "--token (req)", "--domain (default: zoho.com)"] },
+          { "name": "list",        "flags": [] },
+          { "name": "remove",      "flags": ["--name (req)"] },
+          { "name": "show",        "flags": ["--name (req)"] },
+          { "name": "set-default", "flags": ["--name (req)"] },
+          { "name": "re-auth",     "flags": ["--name (req)"], "note": "stub in v1 — returns NOT_IMPLEMENTED" }
+        ]
+      },
+      "scope": {
+        "subcommands": [
+          { "name": "add",    "flags": ["--scope (req)", "--account (optional)"] },
+          { "name": "remove", "flags": ["--scope (req)", "--account (optional)"] },
+          { "name": "list",   "flags": ["--account (optional)"] }
+        ]
+      },
+      "api": {
+        "subcommands": [
+          {
+            "name": "call",
+            "flags": [
+              "--method GET|POST|PUT|PATCH|DELETE (req)",
+              "--path <string> (req)",
+              "--body <json-string> (mutually exclusive with --body-file)",
+              "--body-file <path> (mutually exclusive with --body)",
+              "--header key:value (repeatable)",
+              "--query key=value (repeatable)",
+              "--account <name> (optional override)"
+            ]
+          },
+          { "name": "registry list",   "flags": [],                   "version": "v2" },
+          { "name": "registry add",    "flags": ["--id (req)", "--method (req)", "--url-template (req)", "--purpose (req)"], "version": "v2" },
+          { "name": "registry show",   "flags": ["--id (req)"],        "version": "v2" },
+          { "name": "registry remove", "flags": ["--id (req)"],        "version": "v2" }
+        ]
+      },
+      "trace": {
+        "subcommands": [
+          { "name": "session start",  "flags": ["--name (req)"] },
+          { "name": "session list",   "flags": [] },
+          { "name": "session export", "flags": ["--name (req)", "--truncate-body <bytes> (optional)", "--type api|pex (optional)"] },
+          { "name": "session close",  "flags": ["--name (req)"] },
+          { "name": "session remove", "flags": ["--name (req)"] }
+        ]
+      },
+      "pex": {
+        "version": "v2",
+        "subcommands": [
+          { "name": "connect", "flags": ["--account (optional)"] },
+          { "name": "send",    "flags": ["--message (req)", "--account (optional)"] },
+          { "name": "drain",   "flags": ["--account (optional)"] },
+          { "name": "clear",   "flags": ["--account (optional)"] },
+          { "name": "listen",  "flags": ["--account (optional)"] },
+          { "name": "close",   "flags": ["--account (optional)"] }
+        ]
+      },
+      "util": {
+        "subcommands": [
+          { "name": "time-ms", "description": "Current UTC time as Unix millisecond timestamp" },
+          { "name": "uuid",    "description": "Generate a random UUID v4" }
+        ]
+      }
+    }
+  },
+  "interfaces": {
+    "IKeychainProvider": {
+      "namespace": "CliqCli.Keychain",
+      "methods": [
+        "Task<string?> GetAsync(string key, CancellationToken ct = default)",
+        "Task SetAsync(string key, string value, CancellationToken ct = default)",
+        "Task DeleteAsync(string key, CancellationToken ct = default)"
+      ],
+      "keyFormat": "cliq-cli:<accountName>:<tokenType>",
+      "keyExample": "cliq-cli:work:pat",
+      "implementations": [
+        { "class": "MacOsKeychainProvider",         "backend": "Security.framework via P/Invoke" },
+        { "class": "WindowsKeychainProvider",       "backend": "advapi32.dll CredWrite/CredRead via P/Invoke" },
+        { "class": "LinuxKeychainProvider",         "backend": "libsecret Secret Service via P/Invoke" },
+        { "class": "EncryptedFileKeychainProvider", "backend": "AES-256-GCM, key from machine entropy; path: <configDir>/keystore/<accountName>.bin" }
+      ]
+    },
+    "IAuthProvider": {
+      "namespace": "CliqCli.Core.Auth",
+      "methods": [
+        "Task<string> GetTokenAsync(string accountName, CancellationToken ct = default)",
+        "Task StoreTokenAsync(string accountName, string token, CancellationToken ct = default)",
+        "Task ClearTokenAsync(string accountName, CancellationToken ct = default)"
+      ],
+      "v1Implementation": "PatAuthProvider",
+      "note": "ApiClient calls IAuthProvider.GetTokenAsync() — never IKeychainProvider directly"
+    },
+    "IAccountStore": {
+      "namespace": "CliqCli.Core.Accounts",
+      "methods": [
+        "Task<AccountsRoot> LoadAsync(CancellationToken ct = default)",
+        "Task SaveAsync(AccountsRoot root, CancellationToken ct = default)",
+        "Task<AccountEntry?> FindAsync(string name, CancellationToken ct = default)",
+        "Task<AccountEntry> GetDefaultAsync(CancellationToken ct = default)"
+      ]
+    },
+    "IOutputWriter": {
+      "namespace": "CliqCli.Core",
+      "purpose": "All output goes through this — commands NEVER write to Console directly",
+      "methods": [
+        "void WriteSuccess(object data)",
+        "void WriteError(string message, string code, int exitCode)"
+      ]
+    }
+  },
+  "dataModels": {
+    "AccountEntry": {
+      "namespace": "CliqCli.Core.Accounts",
+      "type": "sealed record",
+      "properties": [
+        { "name": "Name",        "type": "required string",    "jsonKey": "name" },
+        { "name": "Domain",      "type": "required string",    "jsonKey": "domain",       "example": "zoho.com" },
+        { "name": "Email",       "type": "string?",            "jsonKey": "email",        "note": "populated from Zoho user-info API at account add" },
+        { "name": "Scopes",      "type": "List<string>",       "jsonKey": "scopes",       "default": "[]" },
+        { "name": "TokenType",   "type": "required string",    "jsonKey": "token_type",   "values": ["pat", "oauth"] },
+        { "name": "IsDefault",   "type": "bool",               "jsonKey": "is_default" },
+        { "name": "NeedsReauth", "type": "bool",               "jsonKey": "needs_reauth" }
+      ]
+    },
+    "AccountsRoot": {
+      "namespace": "CliqCli.Core.Accounts",
+      "type": "sealed record",
+      "properties": [
+        { "name": "Accounts", "type": "List<AccountEntry>", "jsonKey": "accounts", "default": "[]" }
+      ]
+    },
+    "ApiRequest": {
+      "namespace": "CliqCli.Core.Api",
+      "type": "sealed record",
+      "properties": [
+        { "name": "Method",      "type": "required string" },
+        { "name": "Path",        "type": "required string" },
+        { "name": "Body",        "type": "string?" },
+        { "name": "Headers",     "type": "Dictionary<string, string>", "default": "[]" },
+        { "name": "QueryParams", "type": "Dictionary<string, string>", "default": "[]" },
+        { "name": "AccountName", "type": "required string" }
+      ]
+    },
+    "ApiResponse": {
+      "namespace": "CliqCli.Core.Api",
+      "type": "sealed record",
+      "properties": [
+        { "name": "StatusCode", "type": "int" },
+        { "name": "Body",       "type": "required string", "note": "raw JSON string from server" },
+        { "name": "IsSuccess",  "type": "bool", "computed": "StatusCode is >= 200 and < 300" }
+      ]
+    },
+    "ApiTraceEntry": {
+      "namespace": "CliqCli.Core.Trace",
+      "type": "sealed record",
+      "typeValue": "api",
+      "properties": [
+        "int Seq", "string Type (=> \"api\")", "required string Session",
+        "required DateTimeOffset Timestamp", "int DurationMs", "required string Account",
+        "required string Method", "required string Url",
+        "Dictionary<string, string> RequestHeaders (Authorization EXCLUDED)",
+        "string? RequestBody", "int ResponseStatus",
+        "Dictionary<string, string> ResponseHeaders", "string? ResponseBody",
+        "string? Error (non-null on transport failure only)"
+      ]
+    },
+    "PexTraceEntry": {
+      "namespace": "CliqCli.Core.Trace",
+      "type": "sealed record",
+      "typeValue": "pex",
+      "properties": [
+        "int Seq", "string Type (=> \"pex\")", "required string Session",
+        "required DateTimeOffset Timestamp", "required string Account",
+        "int? RelatedApiSeq (seq of most recent api entry before this drain; null if none)",
+        "required string HandlerClass", "required string CallbackMethod", "required string Payload"
+      ]
+    }
+  },
+  "outputContract": {
+    "stdout": "{ \"status\": \"ok\", \"data\": <result> }",
+    "stderr": "{ \"error\": \"<message>\", \"code\": \"<CODE>\", \"exitCode\": <1|2> }",
+    "exitCodes": { "0": "success", "1": "general/recoverable error", "2": "auth failure / needs-reauth" },
+    "tokenRule": "Token values NEVER appear in any output. account show renders \"token\": \"***\".",
+    "errorCodes": [
+      { "code": "ACCOUNT_NOT_FOUND",      "exit": 1 },
+      { "code": "ACCOUNT_ALREADY_EXISTS", "exit": 1 },
+      { "code": "NO_DEFAULT_ACCOUNT",     "exit": 1 },
+      { "code": "AUTH_FAILURE",           "exit": 2 },
+      { "code": "NEEDS_REAUTH",           "exit": 2 },
+      { "code": "API_ERROR",              "exit": 1 },
+      { "code": "INVALID_ARGS",           "exit": 1 },
+      { "code": "IO_ERROR",               "exit": 1 },
+      { "code": "KEYCHAIN_ERROR",         "exit": 2 },
+      { "code": "ACCOUNT_DOMAIN_BLOCKED", "exit": 1 },
+      { "code": "HOST_NOT_ALLOWED",       "exit": 1 },
+      { "code": "NOT_IMPLEMENTED",        "exit": 1 }
+    ]
+  },
+  "securityRules": {
+    "zohocorpBlock": {
+      "detection": "email.Split('@')[1].Split('.')[0].Equals(\"zohocorp\", StringComparison.OrdinalIgnoreCase)",
+      "enforcedIn": ["PatAuthProvider.StoreTokenAsync", "ApiClient.CallAsync"],
+      "errorCode": "ACCOUNT_DOMAIN_BLOCKED",
+      "override": "NONE — no flag, env var, or config allows bypass"
+    },
+    "hostAllowlist": {
+      "allowedSuffixes": [".zoho.com", ".zoho.eu", ".zoho.in", ".zoho.com.au", ".zohoapis.com", ".zohoapis.in"],
+      "enforcedIn": "ApiClient.CallAsync — before HttpClient.SendAsync",
+      "errorCode": "HOST_NOT_ALLOWED",
+      "override": "NONE — compile-time constant, not configurable"
+    }
+  },
+  "authFlow": {
+    "v1Pat": {
+      "step1": "cliq-cli account add --name 'work' --token 'xxx'",
+      "step2": "Call Zoho user-info API to retrieve email, perform ZohoCorp check",
+      "step3": "PatAuthProvider.StoreTokenAsync('work', 'xxx') → IKeychainProvider.SetAsync('cliq-cli:work:pat', 'xxx')",
+      "step4": "Append AccountEntry (no token) to accounts.json with 0600 perms",
+      "injection": "ApiClient calls IAuthProvider.GetTokenAsync(), injects 'Authorization: Zoho-oauthtoken <token>'"
+    }
+  },
+  "baseUrlResolution": {
+    "pattern": "https://cliq.{account.Domain}/api/v2",
+    "examples": [
+      { "domain": "zoho.com",    "base": "https://cliq.zoho.com/api/v2" },
+      { "domain": "zoho.eu",     "base": "https://cliq.zoho.eu/api/v2" },
+      { "domain": "zoho.in",     "base": "https://cliq.zoho.in/api/v2" },
+      { "domain": "zoho.com.au", "base": "https://cliq.zoho.com.au/api/v2" }
+    ],
+    "pathNormalization": "Prepend /api/v2 to --path if path does not start with /api/"
+  },
+  "traceStorage": {
+    "layout": "<configDir>/cliq-cli/traces/sessions.json  (index)\n<configDir>/cliq-cli/traces/<session-name>/trace.jsonl  (append-only entries)",
+    "activeSessionBehavior": "api call and pex drain auto-append to active session — no --trace flag needed",
+    "noActiveBehavior": "Trace entries silently dropped — no error, no implicit session created",
+    "authHeaderRule": "TraceWriter ALWAYS excludes Authorization from requestHeaders before writing"
+  },
+  "storageFiles": {
+    "accounts":      "<configDir>/accounts.json",
+    "registry":      "<configDir>/registry.json (v2)",
+    "pexBuffer":     "<configDir>/pex-buffer/<account>.jsonl (v2)",
+    "traceIndex":    "<configDir>/traces/sessions.json",
+    "traceEntries":  "<configDir>/traces/<session-name>/trace.jsonl",
+    "keychainFallback": "<configDir>/keystore/<accountName>.bin"
+  }
+}

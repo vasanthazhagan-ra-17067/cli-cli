@@ -1,0 +1,54 @@
+{
+  "storyId": 10,
+  "title": "Pex / WMS Real-time Event Buffering",
+  "description": "Implement the Pex/WMS WebSocket integration: per-account JSONL event buffer, pex connect/send/drain/clear/listen/close commands, and Pex trace entry integration with the trace system.",
+  "status": "Not Started",
+  "dependsOn": [7],
+  "prerequisiteState": "All v1 stories complete. Trace system (story 7) fully working. TraceWriter.AppendPexEntryAsync stub exists or needs creating.",
+  "goal": "pex connect opens a Pex/WMS WebSocket and buffers incoming callback events. pex drain atomically reads and clears the buffer, returning events as a JSON array, and appends pex trace entries to any active session with relatedApiSeq correlation.",
+  "scope": [
+    "Create src/CliqCli.Core/Pex/PexBuffer.cs: per-account append-only JSONL event buffer at <configDir>/pex-buffer/<account>.jsonl; methods: AppendAsync(event), DrainAsync() (reads all + truncates atomically), ClearAsync(), ListAsync()",
+    "Create src/CliqCli.Core/Pex/PexConnection.cs: manages a ClientWebSocket per account; ConnectAsync(account, uri, ct), SendAsync(message, ct), ListenAsync(ct) yields incoming messages, CloseAsync(ct); stores active connections in a ConcurrentDictionary<string, ClientWebSocket>",
+    "Create src/CliqCli.Core/Pex/PexService.cs: orchestrates PexConnection + PexBuffer; DrainAndTrace(accountName, ct) — drains buffer, finds active session's most recent api entry seq for relatedApiSeq, appends PexTraceEntry via TraceWriter for each event",
+    "Derive Pex WMS WebSocket URL from account domain: wss://cliq.{domain}/wms (default assumption — confirm from CliqApiMcp source if accessible)",
+    "Create src/CliqCli/Commands/PexCommands.cs with PexConnectCommand, PexSendCommand, PexDrainCommand, PexClearCommand, PexListenCommand, PexCloseCommand",
+    "PexConnectCommand: validates host against allowlist (WSS scheme), calls PexService.ConnectAsync",
+    "PexDrainCommand: calls PexService.DrainAndTrace, writes events as JSON array to stdout",
+    "PexClearCommand: calls PexBuffer.ClearAsync, returns success",
+    "PexListenCommand: calls PexConnection.ListenAsync, streams each event as one JSON line to stdout (blocking until Ctrl+C)",
+    "PexSendCommand: calls PexConnection.SendAsync with --message content",
+    "PexCloseCommand: calls PexConnection.CloseAsync",
+    "Register all six commands under 'pex' branch in Program.cs",
+    "Unit tests: drain returns buffered events; drain clears buffer atomically; pex trace entries have correct relatedApiSeq; clear discards without returning; connection to non-allowed host → HOST_NOT_ALLOWED"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build succeeds with 0 errors and 0 warnings",
+    "pex connect [--account work] opens a WebSocket and returns success",
+    "pex drain returns { \"status\": \"ok\", \"data\": [ <events> ] } and clears the buffer atomically",
+    "pex drain appends PexTraceEntry per event to active trace session with relatedApiSeq set to most recent api entry seq (or null if none)",
+    "pex clear returns success and discards buffered events",
+    "pex listen streams events to stdout as newline-delimited JSON (one JSON object per line), blocking until Ctrl+C",
+    "pex close closes the WebSocket",
+    "pex connect to a non-allowlist host → HOST_NOT_ALLOWED, exit 1",
+    "Token values never appear in pex-buffer/<account>.jsonl or pex trace entries",
+    "All unit tests pass"
+  ],
+  "contextForAgent": "Read tech_spec §4 pex group and §5 PexTraceEntry model. pex drain's relatedApiSeq is the Seq field of the most recent ApiTraceEntry written to the active session before this drain call — query sessions.json entryCount and read the last 'api' type line from trace.jsonl to find it (or cache it in TraceSession). Token values must not appear in any pex output. WebSocket URL derivation is an open assumption — check CliqApiMcp source at ~/Downloads/CliqApiMcp/CliqApiMcp/WmsPexManager.swift for the actual WMS endpoint pattern.",
+  "openItems": [
+    {
+      "item": "Pex WMS WebSocket URL format",
+      "defaultAssumption": "Derive from account domain: wss://cliq.{domain}/wms. Validate the host against the standard host allowlist before connecting."
+    },
+    {
+      "item": "relatedApiSeq lookup",
+      "defaultAssumption": "Read the last line of the active session's trace.jsonl that has type='api'. If no such line exists or no session is active, set relatedApiSeq=null."
+    }
+  ],
+  "sourceReferences": [
+    "tech_spec/tech_spec.md §4 CLI Structure (pex group)",
+    "tech_spec/tech_spec.md §5 Data Models (PexTraceEntry)",
+    "tech_spec/cliq-cli-prd.md §10.8 CLIQ-008",
+    "tech_spec/adr/adr-0008-trace-sessions-jsonl.md"
+  ],
+  "relevantOpenQuestions": []
+}

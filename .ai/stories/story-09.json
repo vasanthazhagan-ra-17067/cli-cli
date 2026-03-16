@@ -1,0 +1,46 @@
+{
+  "storyId": 9,
+  "title": "API Registry (api registry list/add/show/remove)",
+  "description": "Implement a local JSON catalogue of named Cliq API endpoints. The registry.json format must be compatible with the existing CliqApiMcp registry format to ease migration.",
+  "status": "Not Started",
+  "dependsOn": [5],
+  "prerequisiteState": "All v1 stories complete. ApiClient and api call command working.",
+  "goal": "api registry add/list/show/remove correctly persists and retrieves endpoint entries in registry.json. Format is backward-compatible with CliqApiMcp.",
+  "scope": [
+    "Create src/CliqCli.Core/Api/ApiRegistryEntry.cs sealed record: string Id, string Method, string UrlTemplate, string Purpose",
+    "Create src/CliqCli.Core/Api/ApiRegistryRoot.cs sealed record: List<ApiRegistryEntry> Apis",
+    "Create src/CliqCli.Core/Api/IApiRegistry.cs with LoadAsync, SaveAsync, FindAsync(id), UpsertAsync(entry), RemoveAsync(id), ListAsync",
+    "Create src/CliqCli.Core/Api/ApiRegistry.cs implementing IApiRegistry — persists to <configDir>/registry.json using System.Text.Json with SnakeCaseLower; json key for Apis is 'apis'; id lookup is case-insensitive; UpsertAsync overwrites existing entry with same id",
+    "Create src/CliqCli/Commands/ApiRegistryCommands.cs with RegistryListCommand, RegistryAddCommand, RegistryShowCommand, RegistryRemoveCommand",
+    "RegistryAddSettings: --id (req), --method (req), --url-template (req), --purpose (req)",
+    "RegistryAddCommand.ExecuteAsync: upsert entry, return success with the entry",
+    "RegistryListCommand.ExecuteAsync: return { \"status\": \"ok\", \"data\": [ ... all entries ... ] }",
+    "RegistryShowSettings: --id (req); return entry or REGISTRY_ENTRY_NOT_FOUND exit 1",
+    "RegistryRemoveSettings: --id (req); remove entry or REGISTRY_ENTRY_NOT_FOUND exit 1",
+    "Add REGISTRY_ENTRY_NOT_FOUND to ErrorCodes.cs",
+    "Register all four commands under 'api registry' branch in Program.cs",
+    "Unit tests: add entry, list returns it, show returns it, remove deletes it; show/remove of missing id → REGISTRY_ENTRY_NOT_FOUND; upsert overwrites existing entry"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build succeeds with 0 errors and 0 warnings",
+    "api registry add --id list-channels --method GET --url-template /api/v2/channels --purpose 'List channels' returns success with the entry",
+    "api registry list returns the entry",
+    "api registry show --id list-channels returns the entry",
+    "api registry show --id nonexistent → REGISTRY_ENTRY_NOT_FOUND, exit 1",
+    "api registry remove --id list-channels removes it; subsequent show → REGISTRY_ENTRY_NOT_FOUND",
+    "registry.json uses key 'apis' and snake_case — compatible with CliqApiMcp registry format",
+    "All unit tests pass"
+  ],
+  "contextForAgent": "Read tech_spec §4 api registry subcommands. Read CliqApiMcp registry.json format from Downloads/CliqApiMcp if accessible — the key is 'apis', entries have 'id', 'method', 'urlTemplate', 'purpose'. Use camelCase for urlTemplate in registry.json (not snake_case) to match CliqApiMcp format — this is an exception to the general SnakeCaseLower rule. Confirm by checking the actual CliqApiMcp source if available.",
+  "openItems": [
+    {
+      "item": "registry.json property naming for urlTemplate",
+      "defaultAssumption": "Use 'urlTemplate' (camelCase) in registry.json to match CliqApiMcp format, despite the general SnakeCaseLower policy. Apply a JsonPropertyName attribute on UrlTemplate to override the naming policy for this specific field."
+    }
+  ],
+  "sourceReferences": [
+    "tech_spec/tech_spec.md §4 CLI Structure (api registry)",
+    "tech_spec/cliq-cli-prd.md §10.10 CLIQ-010 API registry"
+  ],
+  "relevantOpenQuestions": []
+}

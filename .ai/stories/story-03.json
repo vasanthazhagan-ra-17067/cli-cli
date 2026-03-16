@@ -1,0 +1,58 @@
+{
+  "storyId": 3,
+  "title": "AccountStore + PatAuthProvider + ZohoCorp Block",
+  "description": "Implement the full account persistence layer and PAT authentication provider, including the ZohoCorp domain hard-block enforced at both storage and dispatch layers. This is the security-critical core that all higher-level commands depend on.",
+  "status": "Not Started",
+  "dependsOn": [1, 2],
+  "prerequisiteState": "Stories 1 and 2 complete. Project compiles. IKeychainProvider, IOutputWriter, CliqCliException, ErrorCodes all exist.",
+  "goal": "Produce a working AccountStore that persists AccountEntry records to accounts.json with correct permissions, and a PatAuthProvider that stores/retrieves PATs via IKeychainProvider while unconditionally blocking ZohoCorp-domain accounts.",
+  "scope": [
+    "Create src/CliqCli.Core/Accounts/AccountEntry.cs as a sealed record with all properties: Name, Domain, Email?, Scopes, TokenType, IsDefault, NeedsReauth",
+    "Create src/CliqCli.Core/Accounts/AccountsRoot.cs as a sealed record with List<AccountEntry> Accounts",
+    "Create src/CliqCli.Core/Accounts/IAccountStore.cs with LoadAsync, SaveAsync, FindAsync, GetDefaultAsync",
+    "Create src/CliqCli.Core/Accounts/AccountStore.cs implementing IAccountStore — reads/writes accounts.json at <configDir>/accounts.json using System.Text.Json with SnakeCaseLower; applies 0600 permissions on Unix via File.SetUnixFileMode; Windows NTFS ACL restriction via FileSecurity (see OQ-004)",
+    "Create ZohoCorp domain check helper in CliqCli.Core as internal static class ZohoCorpGuard with static void AssertNotZohoCorp(string? email) — throws CliqCliException(ACCOUNT_DOMAIN_BLOCKED, 1) if email's first DNS label equals 'zohocorp' (case-insensitive)",
+    "Create src/CliqCli.Core/Auth/IAuthProvider.cs with GetTokenAsync, StoreTokenAsync, ClearTokenAsync",
+    "Create src/CliqCli.Core/Auth/PatAuthProvider.cs implementing IAuthProvider: StoreTokenAsync calls ZohoCorpGuard.AssertNotZohoCorp(email) BEFORE calling IKeychainProvider.SetAsync; GetTokenAsync reads from keychain; ClearTokenAsync deletes from keychain. Key format: 'cliq-cli:<accountName>:pat'",
+    "Register IAccountStore (AccountStore) and IAuthProvider (PatAuthProvider) as singletons in Program.cs DI",
+    "Write unit tests: AccountStore round-trip (write/read/verify); PatAuthProvider rejects zohocorp.com email with ACCOUNT_DOMAIN_BLOCKED; PatAuthProvider rejects zohocorp.eu; PatAuthProvider accepts personal@example.com"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build succeeds with 0 errors and 0 warnings",
+    "AccountStore.SaveAsync writes accounts.json with 0600 permissions on macOS/Linux",
+    "AccountStore.SaveAsync applies NTFS ACL restriction on Windows (current user only)",
+    "AccountStore round-trip: save an AccountEntry, load it back, fields match exactly",
+    "Token value is never serialized into accounts.json (verified by inspecting AccountEntry — no Token property present)",
+    "PatAuthProvider.StoreTokenAsync with email 'user@zohocorp.com' throws CliqCliException with code ACCOUNT_DOMAIN_BLOCKED",
+    "PatAuthProvider.StoreTokenAsync with email 'user@zohocorp.eu' throws CliqCliException with code ACCOUNT_DOMAIN_BLOCKED",
+    "PatAuthProvider.StoreTokenAsync with email 'user@zohocorp.com.au' throws CliqCliException with code ACCOUNT_DOMAIN_BLOCKED",
+    "PatAuthProvider.StoreTokenAsync with email 'user@example.com' succeeds (no exception)",
+    "ZohoCorpGuard is in CliqCli.Core, is internal, and has no conditional/runtime override path",
+    "All tests pass"
+  ],
+  "contextForAgent": "This story is security-critical. Read ADR-0006 thoroughly — the ZohoCorp check must run inside PatAuthProvider.StoreTokenAsync (before keychain write) AND inside ApiClient.CallAsync (story 5). ZohoCorpGuard must be a sealed, internal static class in CliqCli.Core — not in CliqCli, not in Keychain. The detection rule is: email.Split('@')[1].Split('.')[0].Equals('zohocorp', StringComparison.OrdinalIgnoreCase). Read ADR-0003 for keychain key format. Read tech_spec §5 for AccountEntry shape. For Windows ACL, see OQ-004 default assumption. accounts.json uses snake_case via JsonNamingPolicy.SnakeCaseLower.",
+  "openItems": [
+    {
+      "item": "Config directory resolution",
+      "defaultAssumption": "Use Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) on macOS/Linux. Use Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) on Windows. Append 'cliq-cli' to get the config base dir. Create the directory if it does not exist (Directory.CreateDirectory is idempotent)."
+    },
+    {
+      "item": "Windows ACL for accounts.json",
+      "defaultAssumption": "See OQ-004. Use System.Security.AccessControl.FileSecurity. If ACL operation fails, log warning but do not fail the Save operation."
+    },
+    {
+      "item": "GetDefaultAsync when no accounts exist",
+      "defaultAssumption": "Throw CliqCliException with code NO_DEFAULT_ACCOUNT and exit 1."
+    }
+  ],
+  "sourceReferences": [
+    "tech_spec/adr/adr-0003-os-keychain-credential-storage.md",
+    "tech_spec/adr/adr-0005-pat-first-auth-pluggable-iauthprovider.md",
+    "tech_spec/adr/adr-0006-zohocorp-account-restriction.md",
+    "tech_spec/tech_spec.md §5 Data Models",
+    "tech_spec/tech_spec.md §6 Authentication",
+    "tech_spec/tech_spec.md §7 ZohoCorp Account Restriction",
+    "tech_spec/tech_spec.md §8 Storage"
+  ],
+  "relevantOpenQuestions": ["OQ-004", "OQ-005"]
+}

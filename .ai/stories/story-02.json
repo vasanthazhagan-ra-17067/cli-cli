@@ -1,0 +1,51 @@
+{
+  "storyId": 2,
+  "title": "Output Contract + Error Infrastructure + Global Settings",
+  "description": "Implement the JSON output contract, the IOutputWriter abstraction, CliqCliException, GlobalSettings, and the Spectre.Console CommandApp with its global exception handler. This establishes the complete I/O skeleton that every subsequent command will depend on.",
+  "status": "Not Started",
+  "dependsOn": [1],
+  "prerequisiteState": "Story 1 complete. Three projects compile. IKeychainProvider and all implementations exist. Program.cs stub exists.",
+  "goal": "Produce a functional cliq-cli binary that correctly routes all output through IOutputWriter, converts exceptions to the JSON error envelope on stderr, and handles --help and --version with the correct exit codes.",
+  "scope": [
+    "Add Spectre.Console.Cli NuGet reference to CliqCli.csproj",
+    "Add Microsoft.Extensions.DependencyInjection to CliqCli.csproj and CliqCli.Core.csproj",
+    "Create src/CliqCli.Core/IOutputWriter.cs with WriteSuccess(object data) and WriteError(string message, string code, int exitCode)",
+    "Create src/CliqCli.Core/JsonOutputWriter.cs implementing IOutputWriter — writes { \"status\": \"ok\", \"data\": ... } to stdout and { \"error\": ..., \"code\": ..., \"exitCode\": ... } to stderr using System.Text.Json with SnakeCaseLower naming policy",
+    "Create src/CliqCli.Core/InMemoryOutputWriter.cs for tests — captures written output in List<string> properties for assertion",
+    "Create src/CliqCli.Core/CliqCliException.cs with string Code and int ExitCode properties",
+    "Create src/CliqCli.Core/ErrorCodes.cs with all symbolic constants (ACCOUNT_NOT_FOUND, ACCOUNT_ALREADY_EXISTS, NO_DEFAULT_ACCOUNT, AUTH_FAILURE, NEEDS_REAUTH, API_ERROR, INVALID_ARGS, IO_ERROR, KEYCHAIN_ERROR, ACCOUNT_DOMAIN_BLOCKED, HOST_NOT_ALLOWED, NOT_IMPLEMENTED)",
+    "Create src/CliqCli/Commands/GlobalSettings.cs inheriting CommandSettings with --account, --json (default true), --no-input properties",
+    "Update src/CliqCli/Program.cs: create IServiceCollection, register JsonOutputWriter as IOutputWriter singleton, register IKeychainProvider via KeychainProviderFactory, build CommandApp with ITypeRegistrar bridging MEDI, wire SetExceptionHandler to convert CliqCliException and unhandled Exception to JSON error envelope on stderr",
+    "Ensure Ctrl+C (CancellationTokenSource) triggers exit code 1 with no output",
+    "Write unit tests in CliqCli.Tests verifying: WriteSuccess produces correct JSON on stdout; WriteError produces correct envelope on stderr; CliqCliException is correctly serialized by the global exception handler"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build succeeds with 0 errors and 0 warnings",
+    "cliq-cli --version prints the version and exits 0",
+    "cliq-cli --help prints top-level help and exits 0",
+    "An unhandled CliqCliException produces { \"error\": \"...\", \"code\": \"...\", \"exitCode\": 1 } on stderr and exits with the code's exit code",
+    "An unhandled generic Exception produces { \"error\": \"...\", \"code\": \"INTERNAL_ERROR\", \"exitCode\": 1 } on stderr",
+    "IOutputWriter is registered in DI and injected into command classes via constructor",
+    "JsonOutputWriter uses JsonNamingPolicy.SnakeCaseLower for all serialized output",
+    "InMemoryOutputWriter is available in CliqCli.Tests for use by all future test stories",
+    "Token values do not appear in any output path (verified by code inspection — no Console.Write outside IOutputWriter)"
+  ],
+  "contextForAgent": "Read ADR-0004 for the full output contract design including the IOutputWriter rationale. Read ADR-0002 for the Spectre.Console.Cli DI registrar pattern — specifically the ITypeRegistrar bridge to MEDI and the SetExceptionHandler hook. The error envelope has an optional 'detail' field for API_ERROR only (see OQ-007). The --json flag defaults to true in v1; plain-text output is not supported. All command settings classes must inherit GlobalSettings.",
+  "openItems": [
+    {
+      "item": "Optional 'detail' field in error envelope",
+      "defaultAssumption": "See OQ-007. Only API_ERROR uses 'detail'. All other error codes omit it. JsonOutputWriter should support an optional detail parameter on WriteError."
+    },
+    {
+      "item": "Logging setup",
+      "defaultAssumption": "Add Microsoft.Extensions.Logging.Console registered at Warning level by default. Log to stderr only. Do not emit log lines that could break the JSON output contract on stdout."
+    }
+  ],
+  "sourceReferences": [
+    "tech_spec/adr/adr-0002-spectre-console-cli-framework.md",
+    "tech_spec/adr/adr-0004-json-only-output-contract.md",
+    "tech_spec/tech_spec.md §11 Output Contract",
+    "tech_spec/tech_spec.md §12 Error Handling"
+  ],
+  "relevantOpenQuestions": ["OQ-007"]
+}

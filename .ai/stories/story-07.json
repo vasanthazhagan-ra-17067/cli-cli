@@ -1,0 +1,62 @@
+{
+  "storyId": 7,
+  "title": "Trace System + trace session Commands",
+  "description": "Implement the complete named-session trace infrastructure: TraceEntry records, TraceWriter (append-only JSONL), TraceSession (sessions.json index), TraceExporter (JSONL → JSON array), passive auto-append in ApiClient, and all five trace session subcommands.",
+  "status": "Not Started",
+  "dependsOn": [5],
+  "prerequisiteState": "Stories 1-5 complete. ApiClient is working. IOutputWriter is wired. No trace infrastructure exists yet.",
+  "goal": "After trace session start --name my-session, every subsequent api call automatically appends a trace entry to trace.jsonl with Authorization excluded. trace session export returns the complete call log as a JSON array. Sessions survive process exits and agent crashes.",
+  "scope": [
+    "Create src/CliqCli.Core/Trace/TraceEntry.cs with ApiTraceEntry and PexTraceEntry sealed records exactly as defined in tech_spec §5 Data Models",
+    "Create src/CliqCli.Core/Trace/TraceSession.cs: manages sessions.json at <configDir>/cliq-cli/traces/sessions.json; methods: GetActiveSessionAsync, StartSessionAsync(name), CloseSessionAsync(name), RemoveSessionAsync(name), ListSessionsAsync, IncrementEntryCountAsync(name) — uses file locking for concurrent seq safety (see OQ-008)",
+    "Create src/CliqCli.Core/Trace/TraceWriter.cs: AppendApiEntryAsync(ApiTraceEntry) and AppendPexEntryAsync(PexTraceEntry); writes one JSON line to <configDir>/cliq-cli/traces/<session-name>/trace.jsonl; unconditionally removes Authorization key from requestHeaders before serializing; if no session active silently returns",
+    "Create src/CliqCli.Core/Trace/TraceExporter.cs: ExportAsync(name, truncateBodyBytes?, typeFilter?) reads trace.jsonl sequentially, applies optional truncation and type filter, returns IAsyncEnumerable<JsonElement> or serializes to JSON array on stdout via IOutputWriter",
+    "Validate session names in TraceSession.StartSessionAsync: allow only [a-zA-Z0-9_.-], max 64 chars; throw INVALID_ARGS if invalid (see OQ-006)",
+    "Integrate TraceWriter into ApiClient.CallAsync: after receiving the API response (success or error), call TraceWriter.AppendApiEntryAsync with the assembled ApiTraceEntry; this must NOT block or throw if trace write fails — catch and log only",
+    "Create src/CliqCli/Commands/TraceCommands.cs with StartSessionCommand, ListSessionsCommand, ExportSessionCommand, CloseSessionCommand, RemoveSessionCommand",
+    "StartSessionSettings: --name (req); StartSessionCommand.ExecuteAsync calls TraceSession.StartSessionAsync, returns success with session metadata",
+    "ListSessionsCommand.ExecuteAsync: returns array of all sessions with name, startTime, entryCount, status",
+    "ExportSessionSettings: --name (req), --truncate-body (optional int), --type (optional 'api'|'pex'); ExportSessionCommand.ExecuteAsync: calls TraceExporter.ExportAsync, writes result to stdout",
+    "CloseSessionSettings: --name (req); CloseSessionCommand.ExecuteAsync: marks session closed in sessions.json",
+    "RemoveSessionSettings: --name (req); RemoveSessionCommand.ExecuteAsync: deletes sessions.json entry + trace.jsonl directory",
+    "Register all five commands under 'trace session' branch in Program.cs",
+    "Unit tests: Authorization header absent from exported trace entries; session name validation rejects 'bad/name'; if no active session api call succeeds and no trace file created; export is non-destructive (trace.jsonl unchanged after export); --truncate-body truncates body fields in export output but not in .jsonl on disk"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build succeeds with 0 errors and 0 warnings",
+    "trace session start --name test-session returns success; sessions.json entry created with status 'active'",
+    "api call after session start appends exactly one entry to trace.jsonl",
+    "Exported trace entry does NOT contain an 'authorization' key in requestHeaders",
+    "trace session export --name test-session returns a JSON array on stdout; trace.jsonl is unmodified",
+    "trace session export --type api returns only api entries",
+    "trace session export --truncate-body 100 truncates body fields to 100 bytes in output; .jsonl file retains full fidelity",
+    "trace session close marks session status 'closed' in sessions.json; trace.jsonl preserved",
+    "trace session remove deletes sessions.json entry and the session directory",
+    "trace session start with invalid name (e.g. 'bad/name') → INVALID_ARGS, exit 1",
+    "api call when no session is active proceeds normally; no trace file created; no error",
+    "Concurrent trace appends do not corrupt sessions.json entryCount (file locking working)",
+    "All unit tests pass"
+  ],
+  "contextForAgent": "Read ADR-0008 for the full trace design — storage layout, entry types, auto-append behaviour, seq counter, export options, token safety, and the agent workflow integration. The Authorization exclusion must be in TraceWriter itself, not in ApiClient or the command. If TraceWriter fails (e.g., disk full), it must NOT propagate the exception to the caller — api call must still return the API result. Read OQ-006 for session name validation and OQ-008 for the seq counter file locking approach. The trace storage path is <configDir>/cliq-cli/traces/ (note: tech_spec uses cliq-cli/ subdir under configDir).",
+  "openItems": [
+    {
+      "item": "Session name character validation",
+      "defaultAssumption": "See OQ-006. Allow [a-zA-Z0-9_.-], max 64 chars. Throw CliqCliException(INVALID_ARGS, 1) on violation."
+    },
+    {
+      "item": "Concurrent seq counter safety",
+      "defaultAssumption": "See OQ-008. Use a named Mutex (Mutex('Global\\cliq-cli-trace-<sessionName>')) around the read-increment-write cycle on sessions.json. Wait up to 2000ms; if timeout drop the entry silently."
+    },
+    {
+      "item": "Trace write failure isolation",
+      "defaultAssumption": "Wrap all TraceWriter calls in try/catch. On failure, log at Warning level via ILogger. Never rethrow. The api call must complete successfully even if trace writing fails."
+    }
+  ],
+  "sourceReferences": [
+    "tech_spec/adr/adr-0008-trace-sessions-jsonl.md",
+    "tech_spec/tech_spec.md §5 Data Models (ApiTraceEntry, PexTraceEntry)",
+    "tech_spec/tech_spec.md §10 Trace Sessions",
+    "tech_spec/tech_spec.md §4 CLI Structure (trace session commands)"
+  ],
+  "relevantOpenQuestions": ["OQ-006", "OQ-008"]
+}

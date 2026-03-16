@@ -1,0 +1,58 @@
+{
+  "storyId": 5,
+  "title": "ApiClient + api call Command",
+  "description": "Implement ApiClient with the compile-time host allowlist and ZohoCorp block at dispatch, plus the api call command with full flag support. This is the primary value-delivery story — AI agents depend on this to invoke Zoho Cliq REST endpoints.",
+  "status": "Not Started",
+  "dependsOn": [3, 4],
+  "prerequisiteState": "Stories 1-4 complete. AccountStore, PatAuthProvider, ZohoCorpGuard, and all account commands working. DI registered.",
+  "goal": "cliq-cli api call --method GET --path /api/v2/channels returns the Cliq API response in the JSON success envelope. All security controls (host allowlist, ZohoCorp block) fire before any network I/O.",
+  "scope": [
+    "Create src/CliqCli.Core/Api/ApiRequest.cs sealed record with Method, Path, Body?, Headers, QueryParams, AccountName",
+    "Create src/CliqCli.Core/Api/ApiResponse.cs sealed record with StatusCode, Body (raw JSON string), IsSuccess computed property",
+    "Create src/CliqCli.Core/Api/ApiClient.cs sealed class; constructor injects IAuthProvider, IAccountStore, IOutputWriter, ILogger<ApiClient>; single public method: Task<ApiResponse> CallAsync(ApiRequest request, CancellationToken ct)",
+    "ApiClient.CallAsync implementation: (1) load AccountEntry for request.AccountName via IAccountStore; (2) run ZohoCorpGuard.AssertNotZohoCorp(account.Email) — second enforcement point; (3) check account.NeedsReauth — if true throw NEEDS_REAUTH exit 2; (4) build URL: https://cliq.{account.Domain}/api/v2 + normalized path; (5) normalize path: if path does not start with '/api/' prepend '/api/v2'; (6) ValidateHost(uri) — suffix check against compile-time allowlist; (7) IAuthProvider.GetTokenAsync for auth header; (8) dispatch HttpClient.SendAsync; (9) return ApiResponse; (10) on non-2xx wrap as CliqCliException API_ERROR with detail=response body",
+    "ValidateHost private static method: uri.Host must end with one of ['.zoho.com', '.zoho.eu', '.zoho.in', '.zoho.com.au', '.zohoapis.com', '.zohoapis.in'] case-insensitive; on failure throw CliqCliException HOST_NOT_ALLOWED exit 1",
+    "AllowedHostSuffixes must be private static readonly IReadOnlyList<string> — not configurable",
+    "Create src/CliqCli/Commands/ApiCommands.cs with ApiCallCommand extending AsyncCommand<ApiCallSettings>",
+    "ApiCallSettings inherits GlobalSettings; flags: --method (req), --path (req), --body, --body-file, --header (repeatable List<string>), --query (repeatable List<string>); Validate() rejects if both --body and --body-file are set (INVALID_ARGS)",
+    "ApiCallCommand.ExecuteAsync: build ApiRequest, call ApiClient.CallAsync, write result via IOutputWriter.WriteSuccess(response.Body deserialised as JsonElement to preserve raw JSON)",
+    "Register ApiClient as singleton and ApiCallCommand in Program.cs",
+    "Unit tests: ValidateHost rejects 'evil.com'; ValidateHost accepts 'cliq.zoho.com'; ZohoCorp account at dispatch → ACCOUNT_DOMAIN_BLOCKED; NEEDS_REAUTH fires when NeedsReauth=true; --body + --body-file together → INVALID_ARGS; path normalization '/channels' → '/api/v2/channels'"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build succeeds with 0 errors and 0 warnings",
+    "api call --method GET --path /api/v2/channels with valid PAT returns { \"status\": \"ok\", \"data\": <Cliq response> } on stdout",
+    "api call --path /channels (without /api/v2 prefix) is normalized and succeeds",
+    "api call with --body and --body-file together → INVALID_ARGS on stderr, exit 1, no network I/O",
+    "api call with a host not in allowlist (injected via corrupted accounts.json domain) → HOST_NOT_ALLOWED, exit 1, no HttpClient.SendAsync called",
+    "api call when account.NeedsReauth=true → NEEDS_REAUTH, exit 2",
+    "api call with a ZohoCorp-domain account (injected) → ACCOUNT_DOMAIN_BLOCKED, exit 1, no network I/O",
+    "Authorization header is injected by ApiClient — never by the command class",
+    "Non-2xx Cliq API response → API_ERROR on stderr with 'detail' containing the response body",
+    "AllowedHostSuffixes is a sealed compile-time constant — no environment variable or config file reference in the source",
+    "All unit tests pass"
+  ],
+  "contextForAgent": "Read ADR-0007 for the full host allowlist design and the exact ValidateHost implementation pattern. Read ADR-0005 for how IAuthProvider is consumed by ApiClient. Read ADR-0006 for the second ZohoCorp enforcement inside CallAsync. The NEEDS_REAUTH check (account.NeedsReauth) fires before the host check — check the order: (1) load account, (2) ZohoCorp check, (3) NEEDS_REAUTH check, (4) URL build + host check, (5) auth header injection, (6) HTTP dispatch. The data field in the success envelope should be the raw response body as a parsed JsonElement so it is embedded as actual JSON (not a string).",
+  "openItems": [
+    {
+      "item": "HttpClient lifetime",
+      "defaultAssumption": "Register a named HttpClient via IHttpClientFactory in DI (services.AddHttpClient<ApiClient>()). Set a 30-second timeout. Do not create new HttpClient instances in each call."
+    },
+    {
+      "item": "Content-Type header injection",
+      "defaultAssumption": "For POST, PUT, PATCH: inject Content-Type: application/json automatically. For GET, DELETE: omit Content-Type."
+    },
+    {
+      "item": "Query parameter encoding",
+      "defaultAssumption": "Use UriBuilder + HttpUtility.ParseQueryString or QueryString.Create to safely encode query parameters from the --query flags."
+    }
+  ],
+  "sourceReferences": [
+    "tech_spec/adr/adr-0005-pat-first-auth-pluggable-iauthprovider.md",
+    "tech_spec/adr/adr-0006-zohocorp-account-restriction.md",
+    "tech_spec/adr/adr-0007-http-host-allowlist.md",
+    "tech_spec/tech_spec.md §9 API Client",
+    "tech_spec/tech_spec.md §4 CLI Structure (api call flags)"
+  ],
+  "relevantOpenQuestions": ["OQ-007"]
+}

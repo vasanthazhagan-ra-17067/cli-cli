@@ -1,0 +1,101 @@
+{
+  "project": {
+    "name": "cliq-cli",
+    "description": "Standalone cross-platform CLI binary providing a scriptable interface to Zoho Cliq REST APIs. Primary consumer is AI agents (GitHub Copilot CLI Skills, Claude Agent Skills). Direct replacement for CliqApiMcp.",
+    "repository": "cliq-cli",
+    "language": "C# 13+",
+    "runtime": ".NET 10",
+    "publishMode": "dotnet publish -r <rid> /p:PublishSingleFile=true --self-contained true",
+    "supportedRids": ["win-x64", "osx-x64", "osx-arm64", "linux-x64"]
+  },
+  "solutionLayout": {
+    "solutionFile": "src/cliq-cli.sln",
+    "projects": [
+      {
+        "name": "CliqCli",
+        "path": "src/CliqCli/CliqCli.csproj",
+        "responsibility": "Entry point. Spectre.Console command wiring, Program.cs, DI registration. No business logic.",
+        "dependsOn": ["CliqCli.Core", "CliqCli.Keychain"]
+      },
+      {
+        "name": "CliqCli.Core",
+        "path": "src/CliqCli.Core/CliqCli.Core.csproj",
+        "responsibility": "All domain logic: AccountStore, PatAuthProvider, ApiClient, TraceWriter, TraceSession, TraceExporter. No Spectre.Console dependency.",
+        "dependsOn": ["CliqCli.Keychain"]
+      },
+      {
+        "name": "CliqCli.Keychain",
+        "path": "src/CliqCli.Keychain/CliqCli.Keychain.csproj",
+        "responsibility": "IKeychainProvider interface + OS platform implementations + AES-256-GCM fallback. No dependency on Core or CliqCli.",
+        "dependsOn": []
+      },
+      {
+        "name": "CliqCli.Tests",
+        "path": "tests/CliqCli.Tests/CliqCli.Tests.csproj",
+        "responsibility": "xUnit unit tests for CliqCli.Core and CliqCli.Keychain using in-memory fakes. No real OS keychain or network access.",
+        "dependsOn": ["CliqCli.Core", "CliqCli.Keychain"]
+      }
+    ]
+  },
+  "techStack": {
+    "cliFramework": "Spectre.Console.Cli (latest stable)",
+    "json": "System.Text.Json (stdlib, .NET 10) — JsonNamingPolicy.SnakeCaseLower",
+    "di": "Microsoft.Extensions.DependencyInjection (latest stable)",
+    "logging": "Microsoft.Extensions.Logging + Microsoft.Extensions.Logging.Console",
+    "testing": "xUnit (latest stable)",
+    "keychain": "Direct P/Invoke to OS APIs — NO third-party NuGet keychain package"
+  },
+  "scopeBoundaries": {
+    "v1": [
+      "Three-project solution scaffold",
+      "IKeychainProvider + all platform implementations + AES-256-GCM fallback",
+      "IAuthProvider + PatAuthProvider",
+      "IOutputWriter + JSON output contract",
+      "account command group (add, list, remove, show, set-default, re-auth stub)",
+      "scope command group (add, remove, list)",
+      "api call command",
+      "ZohoCorp account hard-block",
+      "HTTP host allowlist",
+      "Trace system (TraceWriter, TraceSession, TraceExporter, trace session commands)",
+      "util commands (time-ms, uuid)"
+    ],
+    "v2": [
+      "API registry (api registry list/add/show/remove)",
+      "Pex/WMS real-time events (pex connect/send/drain/clear/listen/close)",
+      "OAuth2 authentication (OAuthProvider, account re-auth activation)"
+    ],
+    "deferred": [
+      "Native AOT",
+      "Interactive TUI / shell mode",
+      "CI/CD pipeline automation",
+      "WebSocket support (ws group)"
+    ]
+  },
+  "documentInventory": {
+    "prd": "tech_spec/cliq-cli-prd.md",
+    "techSpec": "tech_spec/tech_spec.md",
+    "brainstorming": "tech_spec/brainstorming.md",
+    "adrs": {
+      "ADR-0001": "tech_spec/adr/adr-0001-dotnet-10-runtime-and-language.md",
+      "ADR-0002": "tech_spec/adr/adr-0002-spectre-console-cli-framework.md",
+      "ADR-0003": "tech_spec/adr/adr-0003-os-keychain-credential-storage.md",
+      "ADR-0004": "tech_spec/adr/adr-0004-json-only-output-contract.md",
+      "ADR-0005": "tech_spec/adr/adr-0005-pat-first-auth-pluggable-iauthprovider.md",
+      "ADR-0006": "tech_spec/adr/adr-0006-zohocorp-account-restriction.md",
+      "ADR-0007": "tech_spec/adr/adr-0007-http-host-allowlist.md",
+      "ADR-0008": "tech_spec/adr/adr-0008-trace-sessions-jsonl.md",
+      "ADR-0009": "tech_spec/adr/adr-0009-three-project-architecture.md"
+    }
+  },
+  "configDirectories": {
+    "macOS": "~/Library/Application Support/cliq-cli/",
+    "windows": "%LOCALAPPDATA%\\cliq-cli\\",
+    "linux": "~/.config/cliq-cli/"
+  },
+  "buildRequirements": {
+    "treatWarningsAsErrors": true,
+    "nullable": "enable",
+    "implicitUsings": "enable",
+    "targetFramework": "net10.0"
+  }
+}

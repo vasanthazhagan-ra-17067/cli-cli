@@ -1,0 +1,60 @@
+{
+  "openQuestions": [
+    {
+      "id": "OQ-001",
+      "question": "What is the exact Zoho user-info API endpoint that returns the authenticated user's email address given a PAT?",
+      "context": "Required at account add to validate the PAT and retrieve the email for the ZohoCorp domain check. Must be called before any account data is persisted.",
+      "defaultAssumption": "Use the Zoho Accounts API: GET https://accounts.zoho.com/oauth/user/info with the PAT as Authorization: Zoho-oauthtoken <token>. The response contains an 'Email' field. If the endpoint differs per datacenter, derive it from the account domain: https://accounts.{domain}/oauth/user/info.",
+      "status": "Open"
+    },
+    {
+      "id": "OQ-002",
+      "question": "How exactly is the machine entropy key derived for EncryptedFileKeychainProvider? What sources are used and how are they combined into the AES-256-GCM key?",
+      "context": "The AES-256-GCM key must be machine-specific, reproducible across sessions on the same machine, but not portable. No interactive input from the user.",
+      "defaultAssumption": "Derive from a combination of machine-specific values hashed with SHA-256: (1) machine name from Environment.MachineName, (2) a machine-specific GUID from the OS (e.g. HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography\\MachineGuid on Windows, IOPlatformUUID on macOS via ioreg, /etc/machine-id on Linux). Hash: SHA256(machineName + machineGuid + 'cliq-cli'). Use as AES-256 key. Store the IV alongside the ciphertext in the .bin file (first 12 bytes = IV, remainder = ciphertext + tag).",
+      "status": "Open"
+    },
+    {
+      "id": "OQ-003",
+      "question": "What is the exact libsecret D-Bus call sequence for LinuxKeychainProvider? Specifically: collection name, attribute schema, and secret service API method names for Set/Get/Delete.",
+      "context": "P/Invoke to libsecret is required. No third-party NuGet wrapper allowed. Must work without a GNOME desktop session on servers (should fall back gracefully).",
+      "defaultAssumption": "Use libsecret-1 via P/Invoke. Service: org.freedesktop.Secret.Service. Collection: default. Attributes: { 'application': 'cliq-cli', 'key': '<keystring>' }. On failure (e.g. no D-Bus session, libsecret not found), catch the DllNotFoundException or the operation error and activate EncryptedFileKeychainProvider fallback. Do not throw to the caller — silently return null to trigger fallback.",
+      "status": "Open"
+    },
+    {
+      "id": "OQ-004",
+      "question": "On Windows, how should accounts.json be ACL-restricted to the current user only?",
+      "context": "On Unix, File.SetUnixFileMode with perms 0600 is specified. Windows has no equivalent single API call.",
+      "defaultAssumption": "Use System.Security.AccessControl.FileSecurity. After writing accounts.json, set a DACL that grants FullControl only to the current user (WindowsIdentity.GetCurrent().User) and removes all inherited entries. Call File.SetAccessControl(path, fileSecurity). Wrap in a try/catch — if it fails (e.g. on a FAT32 volume), log a warning via ILogger but do not fail the operation.",
+      "status": "Open"
+    },
+    {
+      "id": "OQ-005",
+      "question": "Should scope list, scope add, and scope remove commands apply the ZohoCorp domain check and reject if the account is a ZohoCorp account?",
+      "context": "ADR-0006 says scope commands are blocked. But scope list is a read-only operation that does not touch external APIs or the keychain.",
+      "defaultAssumption": "Apply the ZohoCorp check uniformly to all scope commands including scope list. This is consistent with ADR-0006 §'Blocked Entry Points' which lists 'Any scope command'. Reject with ACCOUNT_DOMAIN_BLOCKED regardless of whether the operation is read-only.",
+      "status": "Open"
+    },
+    {
+      "id": "OQ-006",
+      "question": "Should trace session names be restricted to a safe filename character set, or is any string accepted?",
+      "context": "Session names are used as filesystem directory names under <configDir>/traces/<session-name>/. Names containing slashes, colons, or other special characters would break path construction.",
+      "defaultAssumption": "Validate session names at trace session start: allow only alphanumeric characters, hyphens, underscores, and dots. Max length 64 characters. Reject invalid names with INVALID_ARGS before creating any filesystem paths.",
+      "status": "Open"
+    },
+    {
+      "id": "OQ-007",
+      "question": "When api call returns a non-2xx HTTP response, should the response body be included in stderr's error envelope or in a separate 'detail' field?",
+      "context": "Tech spec §12 Error Handling says: 'non-2xx responses are converted to API_ERROR with the response body included in \"detail\"'. The standard error envelope only has 'error', 'code', 'exitCode'.",
+      "defaultAssumption": "Add an optional 'detail' field to the error envelope for API_ERROR only: { \"error\": \"HTTP 404 Not Found\", \"code\": \"API_ERROR\", \"exitCode\": 1, \"detail\": <raw response body as parsed JSON or string> }. For all other error codes, omit 'detail'.",
+      "status": "Open"
+    },
+    {
+      "id": "OQ-008",
+      "question": "How should concurrent api call invocations within the same trace session safely increment the seq counter without race conditions?",
+      "context": "ADR-0008 mentions file locking for the seq counter. The sessions.json entryCount field is the source of truth for seq.",
+      "defaultAssumption": "Use a named mutex or file-level lock (FileStream with FileShare.None) around the read-increment-write cycle on sessions.json when appending a trace entry. The lock must be per-session-name scoped. If the lock cannot be acquired within 2 seconds, drop the trace entry silently (do not fail the api call).",
+      "status": "Open"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "storyId": 1,
+  "title": "Three-Project Solution Scaffold + IKeychainProvider",
+  "description": "Create the complete solution structure with three projects, correct project references, build properties, and a fully implemented IKeychainProvider abstraction with all four concrete platform implementations.",
+  "status": "Not Started",
+  "dependsOn": [],
+  "prerequisiteState": "Empty repository. Only tech_spec/ and .ai/ folders exist. No src/ directory yet.",
+  "goal": "Produce a compilable three-project .NET 10 solution where IKeychainProvider is fully defined and all four implementations (macOS, Windows, Linux, encrypted-file fallback) are correctly wired with runtime platform detection.",
+  "scope": [
+    "Create src/cliq-cli.sln referencing all four projects",
+    "Create src/CliqCli/CliqCli.csproj (net10.0, TreatWarningsAsErrors, Nullable enable, PublishSingleFile + self-contained flags in publish profile)",
+    "Create src/CliqCli.Core/CliqCli.Core.csproj (net10.0, TreatWarningsAsErrors, Nullable enable, no Spectre dependency)",
+    "Create src/CliqCli.Keychain/CliqCli.Keychain.csproj (net10.0, TreatWarningsAsErrors, Nullable enable)",
+    "Create tests/CliqCli.Tests/CliqCli.Tests.csproj (net10.0, xUnit, references CliqCli.Core and CliqCli.Keychain)",
+    "Set project references: CliqCli → Core + Keychain; Core → Keychain",
+    "Create src/CliqCli.Keychain/IKeychainProvider.cs with GetAsync/SetAsync/DeleteAsync",
+    "Create src/CliqCli.Keychain/MacOsKeychainProvider.cs using Security.framework P/Invoke (SecKeychainAddGenericPassword / SecKeychainFindGenericPassword / SecKeychainItemDelete)",
+    "Create src/CliqCli.Keychain/WindowsKeychainProvider.cs using advapi32.dll CredWrite/CredRead/CredDelete P/Invoke",
+    "Create src/CliqCli.Keychain/LinuxKeychainProvider.cs using libsecret-1 via P/Invoke; catch DllNotFoundException to signal fallback needed",
+    "Create src/CliqCli.Keychain/EncryptedFileKeychainProvider.cs using AES-256-GCM with machine-entropy derived key (see OQ-002)",
+    "Create src/CliqCli.Keychain/KeychainProviderFactory.cs with static Create() method using RuntimeInformation.IsOSPlatform for platform selection and catching keychain unavailability to activate fallback",
+    "Create src/CliqCli/Program.cs stub (empty CommandApp, no commands yet)",
+    "Run dotnet build and confirm 0 errors, 0 warnings"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build src/cliq-cli.sln succeeds with 0 errors and 0 warnings",
+    "IKeychainProvider interface is in CliqCli.Keychain namespace with exactly GetAsync, SetAsync, DeleteAsync signatures",
+    "All four IKeychainProvider implementations exist as separate classes in src/CliqCli.Keychain/",
+    "KeychainProviderFactory.Create() returns the correct implementation for the current OS",
+    "EncryptedFileKeychainProvider uses AES-256-GCM (not CBC or ECB)",
+    "No third-party NuGet keychain package is referenced in any .csproj",
+    "CliqCli.Core.csproj has zero reference to Spectre.Console",
+    "CliqCli.Keychain.csproj has zero reference to CliqCli.Core or CliqCli",
+    "TreatWarningsAsErrors=true and Nullable=enable present in all four .csproj files",
+    "In-memory fake IKeychainProvider implementation exists in tests/ for use by all other test stories"
+  ],
+  "contextForAgent": "This is the foundation story. Nothing else can be built until this passes. Read ADR-0009 for the three-project layout rationale and dependency graph. Read ADR-0003 for the full keychain design including P/Invoke details for each platform. Read ADR-0001 for .csproj build requirements. The key format is 'cliq-cli:<accountName>:<tokenType>' (e.g. 'cliq-cli:work:pat'). The encrypted-file fallback stores files at <configDir>/keystore/<accountName>.bin. For machine entropy key derivation, see OQ-002 default assumption. For Linux libsecret, see OQ-003.",
+  "openItems": [
+    {
+      "item": "Machine entropy key derivation for EncryptedFileKeychainProvider",
+      "defaultAssumption": "See OQ-002. Use SHA256(MachineName + MachineGuid + 'cliq-cli') as AES-256 key. IV stored as first 12 bytes of .bin file."
+    },
+    {
+      "item": "Linux libsecret fallback activation",
+      "defaultAssumption": "See OQ-003. Catch DllNotFoundException when loading libsecret-1. Catch org.freedesktop.Secret errors. On any failure, return false from a TryInitialize() method. KeychainProviderFactory checks this and selects EncryptedFileKeychainProvider."
+    },
+    {
+      "item": "macOS keychain ACL on unsigned builds",
+      "defaultAssumption": "Use kSecAttrAccessibleWhenUnlocked for access control. If the keychain returns errSecAuthFailed on a developer build, log the error and activate fallback."
+    }
+  ],
+  "sourceReferences": [
+    "tech_spec/adr/adr-0001-dotnet-10-runtime-and-language.md",
+    "tech_spec/adr/adr-0003-os-keychain-credential-storage.md",
+    "tech_spec/adr/adr-0009-three-project-architecture.md"
+  ],
+  "relevantOpenQuestions": ["OQ-002", "OQ-003"]
+}

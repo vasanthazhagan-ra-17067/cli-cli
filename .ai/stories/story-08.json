@@ -1,0 +1,29 @@
+{
+  "storyId": 8,
+  "title": "Utility Commands (util time-ms, util uuid)",
+  "description": "Implement the two util subcommands. These are stateless, simple commands but they must conform to the JSON output contract.",
+  "status": "Not Started",
+  "dependsOn": [2],
+  "prerequisiteState": "Story 2 complete. IOutputWriter and JsonOutputWriter working.",
+  "goal": "util time-ms and util uuid produce correct JSON output and exit 0.",
+  "scope": [
+    "Create src/CliqCli/Commands/UtilCommands.cs with TimeMsCommand and UuidCommand",
+    "TimeMsCommand: no settings beyond GlobalSettings; ExecuteAsync returns { \"status\": \"ok\", \"data\": { \"ts\": <DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()> } }",
+    "UuidCommand: no settings beyond GlobalSettings; ExecuteAsync returns { \"status\": \"ok\", \"data\": { \"uuid\": <Guid.NewGuid().ToString()> } }",
+    "Register both under 'util' branch in Program.cs",
+    "Unit tests: time-ms returns a number > 0 in 'ts'; uuid returns a valid UUID v4 string; both exit 0"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build succeeds with 0 errors and 0 warnings",
+    "util time-ms returns { \"status\": \"ok\", \"data\": { \"ts\": <number> } } on stdout, exit 0",
+    "util uuid returns { \"status\": \"ok\", \"data\": { \"uuid\": \"<guid>\" } } on stdout, exit 0",
+    "util --help shows both subcommands",
+    "Both commands work without a configured account"
+  ],
+  "contextForAgent": "Simple story. Output must go through IOutputWriter, never Console.Write. The ts field is a Unix millisecond timestamp (long). The uuid field is a lowercase hyphenated UUID v4 string from Guid.NewGuid().ToString().",
+  "openItems": [],
+  "sourceReferences": [
+    "tech_spec/tech_spec.md §4 CLI Structure (util group)"
+  ],
+  "relevantOpenQuestions": []
+}

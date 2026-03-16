@@ -1,0 +1,54 @@
+{
+  "storyId": 4,
+  "title": "Account Command Group",
+  "description": "Implement all six account subcommands (add, list, remove, show, set-default, re-auth stub) as thin Spectre.Console command classes that delegate all logic to IAccountStore and IAuthProvider.",
+  "status": "Not Started",
+  "dependsOn": [3],
+  "prerequisiteState": "Stories 1-3 complete. IAccountStore, PatAuthProvider, ZohoCorpGuard all exist and are tested. DI wired in Program.cs.",
+  "goal": "All account subcommands execute end-to-end: account add contacts the Zoho user-info API, stores the PAT in the keychain, persists metadata to accounts.json; account list/show mask the token; account remove clears both keychain and accounts.json; account re-auth returns a NOT_IMPLEMENTED stub.",
+  "scope": [
+    "Create src/CliqCli/Commands/AccountCommands.cs with AddAccountCommand, ListAccountsCommand, RemoveAccountCommand, ShowAccountCommand, SetDefaultAccountCommand, ReAuthAccountCommand — each a nested class extending AsyncCommand<TSettings> inheriting GlobalSettings",
+    "AddAccountSettings: --name (req), --token (req), --domain (default 'zoho.com')",
+    "AddAccountCommand.ExecuteAsync: (1) validate name unique via IAccountStore.FindAsync; (2) call Zoho user-info API GET https://accounts.{domain}/oauth/user/info with Authorization: Zoho-oauthtoken <token> to retrieve email (OQ-001); (3) call PatAuthProvider.StoreTokenAsync(name, token) passing email for ZohoCorpGuard; (4) build AccountEntry and append via IAccountStore.SaveAsync; (5) if first account set is_default=true; (6) write success envelope with account metadata — no token",
+    "ListAccountsCommand.ExecuteAsync: load all accounts, map to output DTO with token omitted and scope_count computed, write success",
+    "ShowAccountSettings: --name (req); ShowAccountCommand.ExecuteAsync: find account by name, render token field as '***', write success",
+    "RemoveAccountSettings: --name (req); RemoveAccountCommand.ExecuteAsync: (1) find account; (2) PatAuthProvider.ClearTokenAsync; (3) remove from AccountsRoot, SaveAsync",
+    "SetDefaultSettings: --name (req); SetDefaultAccountCommand.ExecuteAsync: update is_default — only named account true, all others false, SaveAsync",
+    "ReAuthSettings: --name (req); ReAuthAccountCommand.ExecuteAsync: write error NOT_IMPLEMENTED 're-auth is not supported in v1; use account remove and re-add with a new PAT', exit 1",
+    "Register all six commands under 'account' branch in Program.cs",
+    "Unit tests: add duplicate name → ACCOUNT_ALREADY_EXISTS; add zohocorp PAT → ACCOUNT_DOMAIN_BLOCKED; list masks tokens; show renders '***'; remove clears keychain + entry; set-default updates correctly"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build succeeds with 0 errors and 0 warnings",
+    "account add --name work --token xxx returns { \"status\": \"ok\", \"data\": { \"name\": \"work\", \"domain\": \"zoho.com\" } } — no token in data",
+    "account add with existing name → ACCOUNT_ALREADY_EXISTS on stderr, exit 1",
+    "account add with ZohoCorp PAT → ACCOUNT_DOMAIN_BLOCKED on stderr, exit 1; nothing written to accounts.json or keychain",
+    "account list returns all accounts; no token value in any output field",
+    "account show --name work returns account with \"token\": \"***\"",
+    "account remove --name work removes keychain entry and accounts.json entry atomically",
+    "account set-default --name work sets is_default=true only for 'work'",
+    "account re-auth --name work → NOT_IMPLEMENTED on stderr, exit 1",
+    "account --help shows all six subcommands",
+    "No command class contains business logic beyond Validate() flag checks",
+    "All unit tests pass"
+  ],
+  "contextForAgent": "Read ADR-0002 for Spectre.Console command wiring. Read ADR-0006 for ZohoCorp block at account add. The user-info API is in OQ-001 default assumption. PatAuthProvider.StoreTokenAsync is where ZohoCorpGuard fires — the command does not call ZohoCorpGuard directly. Token must never appear in success envelope or accounts.json. If --no-input is set and any required flag is missing, Validate() must return ValidationResult.Error — Spectre converts this to exit 1 with INVALID_ARGS.",
+  "openItems": [
+    {
+      "item": "Zoho user-info API endpoint",
+      "defaultAssumption": "See OQ-001. GET https://accounts.{domain}/oauth/user/info with Authorization: Zoho-oauthtoken <token>. Response JSON has 'Email' field. 401 → AUTH_FAILURE. Network failure → IO_ERROR."
+    },
+    {
+      "item": "First account auto-default",
+      "defaultAssumption": "If accounts.json has 0 accounts before this add, set is_default=true on the new entry automatically."
+    }
+  ],
+  "sourceReferences": [
+    "tech_spec/adr/adr-0002-spectre-console-cli-framework.md",
+    "tech_spec/adr/adr-0005-pat-first-auth-pluggable-iauthprovider.md",
+    "tech_spec/adr/adr-0006-zohocorp-account-restriction.md",
+    "tech_spec/tech_spec.md §4 CLI Structure (account group)",
+    "tech_spec/tech_spec.md §6 Authentication (PAT Add Flow)"
+  ],
+  "relevantOpenQuestions": ["OQ-001"]
+}

@@ -1,0 +1,812 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "meta": {
+    "title": "cliq-cli — Cross-Platform Zoho Cliq API CLI",
+    "version": "1.0",
+    "generatedFrom": "tech_spec/cliq-cli-prd.md",
+    "sourceOfTruth": "tech_spec/ directory. The tech_spec files are the only source of truth.",
+    "lastUpdated": "2026-03-16",
+    "status": "Draft",
+    "authors": ["cliq-cli contributors"]
+  },
+  "documentInventory": [
+    {
+      "id": 1,
+      "path": "tech_spec/cliq-cli-prd.md",
+      "covers": "Full PRD: product overview, goals, personas, functional requirements, UX, narrative, success metrics, technical considerations, milestones, user stories"
+    },
+    {
+      "id": 2,
+      "path": "tech_spec/tech_spec.md",
+      "covers": "Technical specification: solution structure, project layout, command tree, output contract, data storage, keychain integration, auth providers, trace system, test strategy"
+    },
+    {
+      "id": 3,
+      "path": "tech_spec/brainstorming.md",
+      "covers": "Project vision and design exploration: CliqApiMcp replacement rationale, cross-platform constraints, agent-first design, preliminary architecture ideas"
+    },
+    {
+      "id": 4,
+      "path": "tech_spec/adr/adr-0001-dotnet-10-runtime-and-language.md",
+      "covers": "Decision: .NET 10 / C# 13 as runtime and language"
+    },
+    {
+      "id": 5,
+      "path": "tech_spec/adr/adr-0002-spectre-console-cli-framework.md",
+      "covers": "Decision: Spectre.Console.Cli as CLI framework"
+    },
+    {
+      "id": 6,
+      "path": "tech_spec/adr/adr-0003-os-keychain-credential-storage.md",
+      "covers": "Decision: OS-native keychain via P/Invoke with AES-256-GCM encrypted-file fallback; no third-party NuGet keychain package"
+    },
+    {
+      "id": 7,
+      "path": "tech_spec/adr/adr-0004-json-only-output-contract.md",
+      "covers": "Decision: all stdout/stderr output is valid JSON; fixed symbolic error code vocabulary; three exit codes (0, 1, 2)"
+    },
+    {
+      "id": 8,
+      "path": "tech_spec/adr/adr-0005-pat-first-auth-pluggable-iauthprovider.md",
+      "covers": "Decision: PAT-first auth via pluggable IAuthProvider; PatAuthProvider in v1; OAuthProvider drop-in in v2"
+    },
+    {
+      "id": 9,
+      "path": "tech_spec/adr/adr-0006-zohocorp-account-restriction.md",
+      "covers": "Decision: hard-block any account whose email domain first DNS label equals 'zohocorp' (case-insensitive)"
+    },
+    {
+      "id": 10,
+      "path": "tech_spec/adr/adr-0007-http-host-allowlist.md",
+      "covers": "Decision: compile-time allowlist of Zoho datacenter host suffixes; HOST_NOT_ALLOWED if host not matched; no override path"
+    }
+  ],
+  "projectSummary": {
+    "name": "cliq-cli",
+    "fullName": "Zoho Cliq CLI",
+    "description": "A standalone, self-contained command-line binary providing a deterministic, scriptable interface to Zoho Cliq REST APIs. Manages multiple Zoho accounts, handles authentication via a pluggable interface (PAT in v1, OAuth2 in v2), and exposes a general-purpose HTTP API invoker.",
+    "problem": "CliqApiMcp (the predecessor macOS MCP server app) could not run headlessly, required a running UI session for authentication, and was tied to internal Zoho CocoaPod dependencies (ZMacAuth, PEXLibrary). No cross-platform, headless-capable, agent-friendly Cliq API CLI exists.",
+    "replacementFor": "CliqApiMcp — macOS-only Cliq API MCP server over stdio",
+    "primaryConsumers": [
+      "AI agents — GitHub Copilot CLI Skills and Claude Agent Skills that invoke cliq-cli as a subprocess",
+      "Zoho developers — interactive terminal use, pipeline composition with jq"
+    ],
+    "coreWorkflow": "Agent or human invokes `cliq-cli <command-group> <command> [flags]` → cliq-cli authenticates via PAT/OAuth, validates host allowlist, dispatches HTTP request to Zoho Cliq API → structured JSON to stdout (success) or stderr (error).",
+    "keyProperties": [
+      "Single self-contained binary, .NET 10 / C# 13, no runtime pre-install required",
+      "CLI framework: Spectre.Console.Cli",
+      "Platforms: macOS (Intel + Apple Silicon), Windows x64, Linux x64",
+      "Auth: PAT-first via IAuthProvider; OS-native keychain (P/Invoke) or AES-256-GCM file fallback",
+      "All stdout/stderr output is valid JSON; fixed symbolic error codes; exit codes 0 / 1 / 2",
+      "Compile-time HTTP host allowlist; ZohoCorp domain hard-block (unconditional, dual-layer)",
+      "Passive trace recording: all api call invocations auto-appended to active session JSONL"
+    ]
+  },
+  "goals": {
+    "business": [
+      "Replace CliqApiMcp with a cross-platform, headless-capable alternative distributable via GitHub Releases and standard package managers.",
+      "Enable AI agent workflows (Copilot, Claude) to drive Zoho Cliq API operations without human interaction.",
+      "Establish a versioned, stable output contract (JSON envelopes + symbolic error codes) that agent skill manifests can depend on across releases.",
+      "Provide a single tool consolidating Cliq account management, API invocation, real-time event buffering, and session tracing."
+    ],
+    "user": [
+      "Developers: add, manage, and switch between multiple Zoho accounts; invoke any Cliq REST endpoint without writing boilerplate HTTP code.",
+      "AI agents: receive machine-parseable JSON from every command invocation; handle errors generically using symbolic codes without per-command parsing logic.",
+      "Zoho engineering teams: record, export, and post-mortem complete API call traces across multi-step analysis sessions."
+    ],
+    "nonGoals": [
+      "Native AOT compilation (deferred post-v1; PublishSingleFile with JIT is sufficient).",
+      "Interactive TUI / shell mode — output contract is pure JSON; no styled terminal output.",
+      "Support for ZohoCorp employee accounts (*@zohocorp.*) — hard-blocked unconditionally.",
+      "OAuth2 authorization code (browser-redirect) flow — v2 OAuth uses an API-based terminal flow with no browser, no redirect URL, no local HTTP listener.",
+      "Plugin or extensibility system for third-party command groups — command tree is fixed at compile time in v1.",
+      "Automatic token rotation or expiry handling in v1 (PATs are long-lived; no refresh logic until OAuth2).",
+      "CI/CD pipeline automation, GitHub Actions release workflows, multi-RID artifact publishing, code-signing automation, and Homebrew tap publishing — deferred to a dedicated DevOps phase after v1 GA."
+    ]
+  },
+  "personas": [
+    {
+      "id": "P1",
+      "name": "Vasanth / Internal Zoho Developer",
+      "type": "Developer / power user",
+      "description": "Senior Zoho engineer exploring Cliq APIs for a new integration feature. Uses cliq-cli interactively to prototype API calls, register useful endpoints in the registry, and package calls into an agent skill.",
+      "needs": [
+        "Terse CLI commands",
+        "JSON output that pipes cleanly into shell tools (jq)",
+        "Multi-account management across datacenters (EU, US, IN)"
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Copilot Agent (AI)",
+      "type": "AI agent",
+      "description": "GitHub Copilot Agent instance running a CLI Skill. Calls cliq-cli as a subprocess for each API interaction. Issues commands, parses stdout JSON, and branches on the 'code' field in stderr on failure.",
+      "needs": [
+        "Machine-parseable JSON on stdout and stderr for every invocation",
+        "Fixed symbolic error code vocabulary — error-handling logic written once, works for all commands",
+        "No interactive prompts in any code path"
+      ]
+    }
+  ],
+  "roleBasedAccess": [
+    {
+      "role": "Account owner (human)",
+      "capabilities": "Add, remove, and manage all configured accounts on the local machine. Access governed by the PAT/OAuth token's own permissions against the Zoho Cliq API."
+    },
+    {
+      "role": "Agent (automated)",
+      "capabilities": "Inherits account permissions at the token level. Cannot manage accounts directly — account configuration must be completed by a human before the agent skill is invoked."
+    },
+    {
+      "role": "ZohoCorp domain accounts",
+      "capabilities": "Hard-blocked at both 'account add' and 'api call' regardless of invoker. Error code: ACCOUNT_DOMAIN_BLOCKED."
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-001",
+      "area": "Account management",
+      "version": "v1",
+      "priority": "High",
+      "description": "Add, list, remove, show, set-default, and re-auth-stub account operations.",
+      "details": [
+        "account add: stores PAT in OS keychain, writes metadata (without token) to accounts.json; fetches email from Zoho user-info API to validate PAT and perform ZohoCorp domain check before persisting.",
+        "account list: returns all accounts with token values masked; valid JSON.",
+        "account remove: deletes keychain secret and accounts.json entry atomically.",
+        "account show: returns full metadata with token rendered as '***'.",
+        "account set-default: updates is_default in accounts.json; subsequent commands resolve to this account when --account is omitted.",
+        "account re-auth: stub in v1 returns clear 'not yet supported' error; fully implemented with OAuth2 in v2."
+      ]
+    },
+    {
+      "id": "FR-002",
+      "area": "PAT authentication and secure credential storage",
+      "version": "v1",
+      "priority": "High",
+      "description": "OS-native keychain storage via P/Invoke with AES-256-GCM encrypted-file fallback.",
+      "details": [
+        "macOS: Security.framework (Keychain Services)",
+        "Windows: Credential Manager (advapi32.dll CredWrite/CredRead)",
+        "Linux: Secret Service (libsecret)",
+        "No third-party keychain NuGet dependency.",
+        "Encrypted-file fallback (AES-256-GCM, machine-derived key) activates automatically on headless/CI environments.",
+        "IAuthProvider.GetTokenAsync injects 'Authorization: Zoho-oauthtoken <token>' into every outgoing request.",
+        "Token values must never appear in any output, log, or file in plain text."
+      ]
+    },
+    {
+      "id": "FR-003",
+      "area": "API invocation",
+      "version": "v1",
+      "priority": "High",
+      "description": "Call any Cliq REST endpoint with configurable method, path, headers, query params, and body.",
+      "details": [
+        "api call --method <M> --path <P> [--body <json>|--body-file <file>] [--header k:v]... [--query k=v]...",
+        "--body and --body-file are mutually exclusive; violation produces INVALID_ARGS before any network I/O.",
+        "Paths not starting with '/api/' are automatically prefixed with '/api/v2'.",
+        "Fully resolved request host validated against compile-time allowlist before HttpClient.SendAsync.",
+        "Hosts not on allowlist produce HOST_NOT_ALLOWED, exit 1.",
+        "Returns raw API response as {\"status\":\"ok\",\"data\":<response>} on stdout."
+      ]
+    },
+    {
+      "id": "FR-004",
+      "area": "Scope management",
+      "version": "v1 (scaffolded for v2)",
+      "priority": "Medium",
+      "description": "Record OAuth scope metadata per account; scaffolded for v2 enforcement.",
+      "details": [
+        "scope add --scope <s>: appends scope string, sets needs_reauth = true.",
+        "scope remove --scope <s>: removes scope, sets needs_reauth = true.",
+        "scope list: returns scope array as JSON array in success envelope.",
+        "api call on account with needs_reauth = true returns NEEDS_REAUTH, exit 2.",
+        "In v1, account re-auth returns 'not yet supported'; no partial OAuth flow attempted."
+      ]
+    },
+    {
+      "id": "FR-005",
+      "area": "Trace sessions",
+      "version": "v1",
+      "priority": "High",
+      "description": "Passive capture of all api call invocations as append-only JSONL entries within a named session.",
+      "details": [
+        "trace session start --name <n>: creates active session; sessions.json entry written.",
+        "All api call invocations while a session is active append a trace entry to <session-name>/trace.jsonl without extra flags.",
+        "Authorization headers unconditionally excluded from all trace entries.",
+        "trace session export --name <n>: emits JSON array to stdout; non-destructive.",
+        "--truncate-body <bytes>: limits body field lengths in export without modifying on-disk file.",
+        "trace session close: marks session inactive; file preserved.",
+        "trace session remove: deletes session entry and all files.",
+        "If no session is active, api call proceeds normally and silently skips trace — no error emitted.",
+        "Concurrent api call invocations in the same session use file locking to serialize seq counter increments."
+      ]
+    },
+    {
+      "id": "FR-006",
+      "area": "ZohoCorp block and HTTP host allowlist",
+      "version": "v1",
+      "priority": "High",
+      "description": "Unconditional security controls — dual-layer ZohoCorp domain block and compile-time HTTP host allowlist.",
+      "details": [
+        "Any email whose host's first DNS label equals 'zohocorp' (case-insensitive) is rejected at account add with ACCOUNT_DOMAIN_BLOCKED, exit 1. Covers all datacenter TLDs without a TLD list.",
+        "Block enforced inside PatAuthProvider.StoreTokenAsync AND ApiClient.CallAsync — cannot be bypassed at command layer.",
+        "HTTP allowlist suffixes: .zoho.com, .zoho.eu, .zoho.in, .zoho.com.au, .zohoapis.com, .zohoapis.in.",
+        "Hosts not on allowlist produce HOST_NOT_ALLOWED, exit 1; no network I/O performed.",
+        "No flag, environment variable, or config file can override either restriction."
+      ]
+    },
+    {
+      "id": "FR-007",
+      "area": "JSON output contract",
+      "version": "v1",
+      "priority": "High",
+      "description": "All commands write only valid JSON to stdout (success) and stderr (error). No plain text in any code path.",
+      "details": [
+        "Success envelope: {\"status\":\"ok\",\"data\":<payload>}",
+        "Error envelope: {\"status\":\"error\",\"code\":\"<SYMBOLIC_CODE>\",\"message\":\"<human-readable>\"}",
+        "Symbolic error codes: ACCOUNT_NOT_FOUND, AUTH_FAILURE, NEEDS_REAUTH, HOST_NOT_ALLOWED, ACCOUNT_DOMAIN_BLOCKED, INVALID_ARGS, REGISTRY_ENTRY_NOT_FOUND (and others as defined in tech spec).",
+        "Exit codes: 0 = success, 1 = general error, 2 = auth failure / needs-reauth."
+      ]
+    },
+    {
+      "id": "FR-008",
+      "area": "Utility commands",
+      "version": "v1",
+      "priority": "Low",
+      "description": "Lightweight utility subcommands.",
+      "details": [
+        "util time-ms: current UTC time as Unix millisecond timestamp.",
+        "util uuid: generate a random UUID v4."
+      ]
+    },
+    {
+      "id": "FR-009",
+      "area": "Pex / WMS real-time event buffering",
+      "version": "v2",
+      "priority": "High",
+      "description": "Named Pex/WMS WebSocket connections with per-account JSONL event buffering and drain.",
+      "details": [
+        "pex connect [--account <n>]: opens WMS WebSocket; buffers events to <configDir>/cliq-cli/pex-buffer/<account>.jsonl.",
+        "pex drain [--account <n>]: atomically reads and truncates buffer; returns events as JSON array; appends pex trace entries with relatedApiSeq correlation.",
+        "pex clear: discards buffer without returning events.",
+        "pex listen: streams events to stdout as JSONL (blocking; Ctrl+C to stop).",
+        "pex close: closes WebSocket.",
+        "Token values never appear in Pex buffer files."
+      ]
+    },
+    {
+      "id": "FR-010",
+      "area": "API registry",
+      "version": "v2",
+      "priority": "Medium",
+      "description": "Local catalogue of named Cliq API endpoints with method, URL template, and purpose.",
+      "details": [
+        "api registry add --id <id> --method <M> --url-template <t> --purpose <p>: upserts entry into registry.json.",
+        "api registry list: returns all entries as JSON array.",
+        "api registry show --id <id>: returns single entry.",
+        "api registry remove --id <id>: deletes entry; REGISTRY_ENTRY_NOT_FOUND if not exists.",
+        "registry.json format compatible with existing CliqApiMcp registry for seamless migration."
+      ]
+    },
+    {
+      "id": "FR-011",
+      "area": "OAuth2 authentication",
+      "version": "v2",
+      "priority": "Medium",
+      "description": "OAuthProvider as a drop-in IAuthProvider replacement; API-based terminal flow; no browser required.",
+      "details": [
+        "OAuthProvider implements IAuthProvider; ApiClient and all command classes require no changes.",
+        "account add supports --client-id and --client-secret flags when OAuthProvider is active.",
+        "account re-auth: exchanges new token via Zoho OAuth API; sets needs_reauth = false.",
+        "OAuth tokens stored in OS keychain: cliq-cli:<accountName>:oauth.",
+        "No browser window, redirect URL, or local HTTP server required at any point.",
+        "scope add/remove triggers needs_reauth = true; api call returns NEEDS_REAUTH until re-auth is run."
+      ]
+    },
+    {
+      "id": "FR-012",
+      "area": "WebSocket support",
+      "version": "v2/v3",
+      "priority": "Low",
+      "description": "Named WebSocket connections with connect, send, listen, and close subcommands. Streaming JSONL output for listen."
+    }
+  ],
+  "outputContract": {
+    "stdout": {
+      "format": "Valid JSON only",
+      "successEnvelope": "{\"status\":\"ok\",\"data\":<payload>}",
+      "notes": "No plain text, no ANSI escape sequences, no styled terminal output in any success code path."
+    },
+    "stderr": {
+      "format": "Valid JSON only",
+      "errorEnvelope": "{\"status\":\"error\",\"code\":\"<SYMBOLIC_CODE>\",\"message\":\"<human-readable string>\"}",
+      "notes": "Authorization headers unconditionally excluded."
+    },
+    "exitCodes": [
+      { "code": 0, "meaning": "Success" },
+      { "code": 1, "meaning": "General error" },
+      { "code": 2, "meaning": "Auth failure or needs-reauth" }
+    ],
+    "errorCodes": [
+      "ACCOUNT_NOT_FOUND",
+      "AUTH_FAILURE",
+      "NEEDS_REAUTH",
+      "HOST_NOT_ALLOWED",
+      "ACCOUNT_DOMAIN_BLOCKED",
+      "INVALID_ARGS",
+      "REGISTRY_ENTRY_NOT_FOUND"
+    ]
+  },
+  "commandTree": {
+    "description": "cliq-cli v1 + v2 command surface",
+    "v1": [
+      "cliq-cli --help",
+      "cliq-cli --version",
+      "cliq-cli account add --name <n> --token <pat> [--domain <d>]",
+      "cliq-cli account list",
+      "cliq-cli account show --name <n>",
+      "cliq-cli account remove --name <n>",
+      "cliq-cli account set-default --name <n>",
+      "cliq-cli account re-auth --name <n>  (stub in v1)",
+      "cliq-cli api call --method <M> --path <P> [--body <json>|--body-file <file>] [--header k:v]... [--query k=v]...",
+      "cliq-cli scope add --scope <s> [--account <n>]",
+      "cliq-cli scope remove --scope <s> [--account <n>]",
+      "cliq-cli scope list [--account <n>]",
+      "cliq-cli trace session start --name <n>",
+      "cliq-cli trace session list",
+      "cliq-cli trace session export --name <n> [--truncate-body <bytes>] [--type api|pex]",
+      "cliq-cli trace session close [--name <n>]",
+      "cliq-cli trace session remove --name <n>",
+      "cliq-cli util time-ms",
+      "cliq-cli util uuid"
+    ],
+    "v2additions": [
+      "cliq-cli account add --client-id <id> --client-secret <secret>  (OAuth2)",
+      "cliq-cli account re-auth --name <n>  (OAuth2 fully activated)",
+      "cliq-cli api registry add --id <id> --method <M> --url-template <t> --purpose <p>",
+      "cliq-cli api registry list",
+      "cliq-cli api registry show --id <id>",
+      "cliq-cli api registry remove --id <id>",
+      "cliq-cli pex connect [--account <n>]",
+      "cliq-cli pex drain [--account <n>]",
+      "cliq-cli pex clear [--account <n>]",
+      "cliq-cli pex listen [--account <n>]",
+      "cliq-cli pex close [--account <n>]"
+    ]
+  },
+  "dataStorage": {
+    "configDir": {
+      "macOS": "~/Library/Application Support/cliq-cli/",
+      "windows": "%LOCALAPPDATA%\\cliq-cli\\",
+      "linux": "~/.config/cliq-cli/"
+    },
+    "files": [
+      {
+        "path": "<configDir>/accounts.json",
+        "description": "Account metadata — name, domain, is_default, needs_reauth, scopes[]. Token values never stored here.",
+        "permissions": "0600 on Unix"
+      },
+      {
+        "path": "<configDir>/traces/<session-name>/trace.jsonl",
+        "description": "Append-only JSONL trace entries for each active session. Authorization headers excluded."
+      },
+      {
+        "path": "<configDir>/traces/sessions.json",
+        "description": "Session registry — name, status (active/closed), created_at."
+      },
+      {
+        "path": "<configDir>/pex-buffer/<account>.jsonl",
+        "description": "Pex/WMS event buffer per account (v2). Atomically read and truncated by pex drain."
+      },
+      {
+        "path": "<configDir>/registry.json",
+        "description": "API registry catalogue — named endpoints with method, URL template, purpose (v2). Compatible with CliqApiMcp format."
+      },
+      {
+        "path": "<configDir>/keystore/<accountName>.bin",
+        "description": "AES-256-GCM encrypted PAT/OAuth token file — fallback when OS keychain is unavailable."
+      }
+    ],
+    "keychainNaming": {
+      "pat": "cliq-cli:<accountName>:pat",
+      "oauth": "cliq-cli:<accountName>:oauth"
+    }
+  },
+  "technologyDecisions": [
+    {
+      "adr": "ADR-0001",
+      "decision": ".NET 10 / C# 13 as runtime and language",
+      "keyConsequence": "Cross-platform single binary via PublishSingleFile --self-contained; nullable reference types enforced; TreatWarningsAsErrors=true",
+      "source": "tech_spec/adr/adr-0001-dotnet-10-runtime-and-language.md"
+    },
+    {
+      "adr": "ADR-0002",
+      "decision": "Spectre.Console.Cli as CLI framework",
+      "keyConsequence": "Command tree maps naturally to cliq-cli <group> <command> [flags]; auto-generated help; strongly-typed command settings",
+      "source": "tech_spec/adr/adr-0002-spectre-console-cli-framework.md"
+    },
+    {
+      "adr": "ADR-0003",
+      "decision": "OS-native keychain via P/Invoke, no third-party NuGet",
+      "keyConsequence": "Security.framework (macOS), CredWrite/CredRead (Windows), libsecret (Linux); AES-256-GCM file fallback for headless",
+      "source": "tech_spec/adr/adr-0003-os-keychain-credential-storage.md"
+    },
+    {
+      "adr": "ADR-0004",
+      "decision": "JSON-only output contract",
+      "keyConsequence": "stdout = success JSON envelope; stderr = error JSON envelope; fixed symbolic error codes; exit 0/1/2",
+      "source": "tech_spec/adr/adr-0004-json-only-output-contract.md"
+    },
+    {
+      "adr": "ADR-0005",
+      "decision": "PAT-first auth via pluggable IAuthProvider",
+      "keyConsequence": "PatAuthProvider in v1; OAuthProvider is additive in v2 with zero changes to ApiClient or command classes",
+      "source": "tech_spec/adr/adr-0005-pat-first-auth-pluggable-iauthprovider.md"
+    },
+    {
+      "adr": "ADR-0006",
+      "decision": "Hard-block ZohoCorp accounts",
+      "keyConsequence": "First DNS label of email host == 'zohocorp' (case-insensitive) → ACCOUNT_DOMAIN_BLOCKED; enforced at StoreTokenAsync AND ApiClient.CallAsync; no override path",
+      "source": "tech_spec/adr/adr-0006-zohocorp-account-restriction.md"
+    },
+    {
+      "adr": "ADR-0007",
+      "decision": "Compile-time HTTP host allowlist",
+      "keyConsequence": "Allowed suffixes: .zoho.com, .zoho.eu, .zoho.in, .zoho.com.au, .zohoapis.com, .zohoapis.in; HOST_NOT_ALLOWED if no match; no network I/O before check",
+      "source": "tech_spec/adr/adr-0007-http-host-allowlist.md"
+    }
+  ],
+  "architecture": {
+    "solutionProjects": [
+      {
+        "name": "CliqCli",
+        "type": "Console executable",
+        "role": "Entry point; DI composition root; command registration via Spectre.Console.Cli"
+      },
+      {
+        "name": "CliqCli.Core",
+        "type": "Class library",
+        "role": "Domain logic: IAuthProvider, IKeychainProvider, ApiClient, TraceWriter, TraceSession, TraceExporter, output contracts, error codes, account management, scope management; unit-testable with no OS or real HTTP dependencies"
+      },
+      {
+        "name": "CliqCli.Keychain",
+        "type": "Class library",
+        "role": "Platform keychain P/Invoke implementations (macOS, Windows, Linux) and EncryptedFileKeychainProvider fallback"
+      }
+    ],
+    "keyAbstractions": [
+      {
+        "interface": "IAuthProvider",
+        "implementations": ["PatAuthProvider (v1)", "OAuthProvider (v2)"],
+        "contract": "GetTokenAsync(accountName) → bearer token injected as Authorization header"
+      },
+      {
+        "interface": "IKeychainProvider",
+        "implementations": [
+          "MacOsKeychainProvider (Security.framework)",
+          "WindowsKeychainProvider (advapi32.dll)",
+          "LinuxKeychainProvider (libsecret)",
+          "EncryptedFileKeychainProvider (AES-256-GCM fallback)"
+        ],
+        "contract": "StoreAsync / RetrieveAsync / DeleteAsync"
+      },
+      {
+        "class": "ApiClient",
+        "role": "HTTP dispatch layer; enforces host allowlist, ZohoCorp block, and Authorization injection; wraps response in JSON envelope; calls TraceWriter if session active"
+      },
+      {
+        "class": "TraceWriter",
+        "role": "Appends trace entries (request, response, timing, account) to session JSONL file; unconditionally strips Authorization headers; uses file locking for seq counter"
+      },
+      {
+        "interface": "IOutputWriter",
+        "role": "Abstracts stdout/stderr JSON output; enables unit testing of command output without Console.Write"
+      }
+    ],
+    "supportedRIDs": ["win-x64", "osx-x64", "osx-arm64", "linux-x64"]
+  },
+  "securityControls": {
+    "zohoCorpBlock": {
+      "rule": "First DNS label of email host == 'zohocorp' (case-insensitive) → reject",
+      "enforcedAt": ["PatAuthProvider.StoreTokenAsync", "ApiClient.CallAsync"],
+      "bypass": "None — no flag, env var, or config can override",
+      "errorCode": "ACCOUNT_DOMAIN_BLOCKED",
+      "exitCode": 1
+    },
+    "hostAllowlist": {
+      "allowedSuffixes": [".zoho.com", ".zoho.eu", ".zoho.in", ".zoho.com.au", ".zohoapis.com", ".zohoapis.in"],
+      "enforcedAt": "ApiClient.CallAsync before HttpClient.SendAsync",
+      "bypass": "None",
+      "errorCode": "HOST_NOT_ALLOWED",
+      "exitCode": 1
+    },
+    "tokenProtection": [
+      "Tokens stored exclusively in OS keychain or AES-256-GCM encrypted file — never in accounts.json, stdout, stderr, or trace files",
+      "account show renders token as '***' unconditionally",
+      "TraceWriter unconditionally strips Authorization headers from trace entries"
+    ]
+  },
+  "integrationPoints": [
+    {
+      "system": "Zoho Cliq REST API",
+      "description": "Primary target API; base URL derived from account domain field; all calls subject to compile-time host allowlist"
+    },
+    {
+      "system": "Zoho user-info API",
+      "description": "Called at account add to validate PAT and retrieve email for ZohoCorp domain check"
+    },
+    {
+      "system": "OS keychain APIs",
+      "description": "macOS Security.framework, Windows Credential Manager (advapi32.dll), Linux Secret Service (libsecret) — all via P/Invoke without third-party NuGet packages"
+    },
+    {
+      "system": "GitHub Copilot CLI Skills",
+      "description": "SKILL.md in .github/skills/cliq-cli/ describes available commands; Copilot invokes cliq-cli subprocesses and reads stdout JSON"
+    },
+    {
+      "system": "Claude Agent Skills",
+      "description": "Analogous skill manifest; same JSON output contract consumed"
+    },
+    {
+      "system": "Cliq Pex/WMS WebSocket (v2)",
+      "description": "Real-time event stream; buffered per account to JSONL; drained and correlated with api call traces"
+    }
+  ],
+  "userStories": [
+    {
+      "id": "CLIQ-001",
+      "title": "Account management",
+      "version": "v1",
+      "description": "As a Zoho developer, I want to add, list, view, and remove Zoho account credentials from the CLI so that I can manage access to multiple Zoho datacenters from a single tool without manually handling tokens.",
+      "acceptanceCriteria": [
+        "account add --name <n> --token <pat> [--domain <d>] stores the PAT in the OS keychain and writes metadata (without the token) to accounts.json.",
+        "account list returns all accounts with token fields masked; output is valid JSON.",
+        "account show --name <n> returns full metadata with '\"token\": \"***\"'.",
+        "account remove --name <n> deletes the keychain secret and the accounts.json entry atomically.",
+        "account set-default --name <n> updates is_default in accounts.json; subsequent commands resolve to this account when --account is omitted.",
+        "Adding a *@zohocorp.* account returns ACCOUNT_DOMAIN_BLOCKED, exit 1, and no data is persisted.",
+        "All outputs are valid JSON envelopes on stdout (success) or stderr (error)."
+      ]
+    },
+    {
+      "id": "CLIQ-002",
+      "title": "PAT-based authentication and secure credential storage",
+      "version": "v1",
+      "description": "As a Zoho developer, I want PAT credentials stored securely in the OS-native keychain (or an encrypted file fallback on headless systems) so that tokens are never exposed in plain text in any file, log, or output.",
+      "acceptanceCriteria": [
+        "On macOS, Windows, and Linux, IKeychainProvider uses the platform-native store without any third-party NuGet keychain package.",
+        "On headless environments, EncryptedFileKeychainProvider activates automatically using AES-256-GCM with a machine-derived key.",
+        "Token values do not appear in stdout, stderr, accounts.json, or any trace file under any circumstances.",
+        "Unit tests for PatAuthProvider and ApiClient use an in-memory IKeychainProvider mock — no real OS keychain interaction required.",
+        "IAuthProvider.GetTokenAsync injects 'Authorization: Zoho-oauthtoken <token>' into every outgoing request."
+      ]
+    },
+    {
+      "id": "CLIQ-003",
+      "title": "REST API invocation",
+      "version": "v1",
+      "description": "As a Zoho developer and as a Copilot AI agent, I want to call any Zoho Cliq REST endpoint with full control over method, path, headers, query parameters, and body.",
+      "acceptanceCriteria": [
+        "api call dispatches the request and returns the response as {\"status\":\"ok\",\"data\":<response>} on stdout.",
+        "--body and --body-file are mutually exclusive; using both produces INVALID_ARGS on stderr before any network I/O.",
+        "Paths not starting with '/api/' are automatically prefixed with '/api/v2'.",
+        "The fully resolved request host is validated against the compile-time allowlist before HttpClient.SendAsync; hosts not on the list produce HOST_NOT_ALLOWED, exit 1.",
+        "AI agents receive parseable JSON on both stdout and stderr for every invocation."
+      ]
+    },
+    {
+      "id": "CLIQ-004",
+      "title": "Scope management",
+      "version": "v1",
+      "description": "As a Zoho developer, I want to record OAuth scope metadata per account so that when OAuth2 is activated in v2, cliq-cli can enforce re-authentication after scope changes without a breaking schema migration.",
+      "acceptanceCriteria": [
+        "scope add --scope <s> appends the scope string and sets needs_reauth = true.",
+        "scope remove --scope <s> removes the scope and sets needs_reauth = true.",
+        "scope list returns the scope array as a JSON array in the success envelope.",
+        "api call on an account with needs_reauth = true returns NEEDS_REAUTH, exit 2.",
+        "In v1, account re-auth returns a clear 'not yet supported' error; no partial OAuth flow is attempted."
+      ]
+    },
+    {
+      "id": "CLIQ-005",
+      "title": "Session trace recording and export",
+      "version": "v1",
+      "description": "As a Zoho developer and as a Copilot AI agent running an analysis session, I want API calls to be automatically recorded to a named persistent trace so that I can export and review the complete call history after the session ends.",
+      "acceptanceCriteria": [
+        "trace session start --name <n> creates a new active session; sessions.json entry added with status: active.",
+        "All api call invocations while a session is active append a trace entry to <session-name>/trace.jsonl without any extra flag on api call.",
+        "Authorization headers are absent from all trace entries.",
+        "trace session export --name <n> emits a JSON array of all entries to stdout without modifying the .jsonl file.",
+        "--truncate-body <bytes> limits body field lengths in the export without modifying the on-disk file.",
+        "trace session close marks the session inactive; trace session remove deletes session entry and all files.",
+        "If no session is active, api call proceeds normally and silently drops the trace entry — no error emitted."
+      ]
+    },
+    {
+      "id": "CLIQ-006",
+      "title": "Security controls — ZohoCorp block and HTTP host allowlist",
+      "version": "v1",
+      "description": "As the cliq-cli security owner, I want all ZohoCorp-domain accounts unconditionally blocked and all outgoing HTTP requests restricted to known Zoho datacenter hosts.",
+      "acceptanceCriteria": [
+        "Any email whose host's first DNS label equals 'zohocorp' (case-insensitive) is rejected at account add with ACCOUNT_DOMAIN_BLOCKED, exit 1.",
+        "The block is also enforced inside PatAuthProvider.StoreTokenAsync and ApiClient.CallAsync — cannot be bypassed by future command additions.",
+        "Any outgoing request URL whose host does not match a suffix in the compile-time allowlist is rejected with HOST_NOT_ALLOWED, exit 1 — no network I/O is performed.",
+        "No flag, environment variable, or config file can override either restriction.",
+        "Unit tests verify both blocks using in-memory fakes — no real network or keychain access."
+      ]
+    },
+    {
+      "id": "CLIQ-007",
+      "title": "Cross-platform self-contained binary distribution",
+      "version": "v1",
+      "description": "As a Zoho developer, I want to download a single self-contained binary for my platform and use cliq-cli immediately without installing .NET or any other runtime.",
+      "acceptanceCriteria": [
+        "dotnet publish -r <rid> /p:PublishSingleFile=true --self-contained true produces a working binary for win-x64, osx-x64, osx-arm64, and linux-x64.",
+        "The binary runs on a clean OS (no .NET SDK installed) and produces valid JSON on the first invocation.",
+        "Binary size per RID ≤ 80 MB.",
+        "TreatWarningsAsErrors=true and <Nullable>enable</Nullable> enforced in all .csproj files; build fails on any warning or nullable violation."
+      ]
+    },
+    {
+      "id": "CLIQ-008",
+      "title": "Pex / WMS real-time event buffering",
+      "version": "v2",
+      "description": "As a Copilot AI agent running a Cliq API analysis session, I want to connect to Cliq's Pex/WMS real-time event stream, buffer events locally, and drain them as a JSON array.",
+      "acceptanceCriteria": [
+        "pex connect opens a Pex/WMS WebSocket and begins buffering events to <configDir>/cliq-cli/pex-buffer/<account>.jsonl.",
+        "pex drain atomically reads and truncates the buffer; returns all events as a JSON array and appends pex trace entries with relatedApiSeq correlation.",
+        "pex clear discards buffered events without returning them.",
+        "pex listen streams events to stdout as JSONL (blocking; Ctrl+C to stop).",
+        "pex close closes the WebSocket.",
+        "Token values never appear in Pex buffer files."
+      ]
+    },
+    {
+      "id": "CLIQ-009",
+      "title": "OAuth2 authentication",
+      "version": "v2",
+      "description": "As a Zoho developer, I want to authenticate accounts using OAuth2 (machine-to-machine, no browser) with fine-grained scope enforcement.",
+      "acceptanceCriteria": [
+        "OAuthProvider implements IAuthProvider; ApiClient and all command classes require no changes.",
+        "account add supports --client-id and --client-secret flags when OAuthProvider is active.",
+        "account re-auth --name <n> exchanges a new token via the Zoho OAuth API and updates the OS keychain; sets needs_reauth = false.",
+        "OAuth tokens stored in keychain as cliq-cli:<accountName>:oauth.",
+        "scope add/remove triggers needs_reauth = true; api call returns NEEDS_REAUTH until re-auth is run.",
+        "No browser window, redirect URL, or local HTTP server is required at any point."
+      ]
+    },
+    {
+      "id": "CLIQ-010",
+      "title": "API registry",
+      "version": "v2",
+      "description": "As a Zoho developer, I want to maintain a local catalogue of named Cliq API endpoints with methods, URL templates, and purpose descriptions.",
+      "acceptanceCriteria": [
+        "api registry add --id <id> --method <M> --url-template <t> --purpose <p> upserts an entry into registry.json.",
+        "api registry list returns all entries as a JSON array.",
+        "api registry show --id <id> returns a single entry by ID.",
+        "api registry remove --id <id> deletes the entry; REGISTRY_ENTRY_NOT_FOUND when ID does not exist.",
+        "registry.json format is compatible with the existing CliqApiMcp registry format.",
+        "All operations return valid JSON envelopes."
+      ]
+    }
+  ],
+  "milestones": [
+    {
+      "phase": 1,
+      "name": "Foundation",
+      "weeks": "1–2",
+      "version": "v1",
+      "deliverables": [
+        "Three-project solution scaffold: CliqCli, CliqCli.Core, CliqCli.Keychain",
+        "IKeychainProvider with all platform implementations and EncryptedFileKeychainProvider fallback",
+        "IAuthProvider / PatAuthProvider",
+        "IOutputWriter and JSON output contract",
+        "Global flags",
+        "cliq-cli --version and cliq-cli --help functional",
+        "Keychain round-trip tests passing on macOS, Windows, and Linux",
+        "dotnet publish producing working binaries for all four RIDs"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Account & API",
+      "weeks": "3–4",
+      "version": "v1",
+      "deliverables": [
+        "Account management command group: add, list, remove, show, set-default, re-auth stub",
+        "ApiClient with host allowlist and ZohoCorp block",
+        "api call command",
+        "Scope scaffolding",
+        "account add + api call end-to-end functional",
+        "ZohoCorp block and host allowlist verified by unit tests",
+        "NEEDS_REAUTH error path live"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Trace & Utility",
+      "weeks": "5–6",
+      "version": "v1",
+      "deliverables": [
+        "TraceWriter, TraceSession, TraceExporter",
+        "trace session command group",
+        "util commands",
+        "Unit test coverage for CliqCli.Core ≥ 80%",
+        "README and SKILL.md",
+        "trace session start/export/close/remove functional",
+        "Passive trace recording in api call verified",
+        "Binary passes end-to-end smoke tests on all four RIDs"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "v1 GA",
+      "weeks": "7–8",
+      "version": "v1",
+      "deliverables": [
+        "Migration guide from CliqApiMcp",
+        "SKILL.md for Copilot and Claude agent skill directories",
+        "Manual binary distribution via GitHub Releases",
+        "v1.0.0 binaries published to GitHub Releases (manual)",
+        "Note: CI/CD pipeline automation, code-signing, and Homebrew tap deferred to post-GA DevOps phase"
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "v2: OAuth2 + Pex + Registry",
+      "weeks": "9–14",
+      "version": "v2",
+      "deliverables": [
+        "OAuthProvider implementation",
+        "account re-auth activation",
+        "pex command group with WMS WebSocket and buffer",
+        "api registry commands",
+        "pex drain trace correlation (relatedApiSeq)",
+        "Full feature parity with CliqApiMcp",
+        "CliqApiMcp deprecated",
+        "OAuth2 account flow documented"
+      ]
+    }
+  ],
+  "successMetrics": {
+    "userCentric": [
+      "Time-to-first-API-call from binary download ≤ 2 minutes (account add + api call).",
+      "Zero 'install .NET first' support tickets — self-contained binary runs on a clean OS.",
+      "AI agent error rate for JSON parse failures on stdout/stderr = 0% — every output path emits valid JSON.",
+      "Trace export completeness: 100% of api call invocations within an active session appear in the exported JSONL."
+    ],
+    "business": [
+      "Full feature parity with CliqApiMcp MCP tool surface (11 tools mapped to CLI equivalents) achieved in v1 + v2.",
+      "CliqApiMcp deprecated and removed from active use within 1 release cycle of cliq-cli v2 GA.",
+      "cliq-cli used as the primary Cliq API interface in ≥ 3 internal Zoho agent skill packages within 6 months of v1 GA."
+    ],
+    "technical": [
+      "Binary size ≤ 80 MB per RID (self-contained .NET 10 baseline).",
+      "Unit test coverage ≥ 80% on CliqCli.Core (domain logic; no OS keychain or real HTTP required).",
+      "Cold-start latency ≤ 500 ms for cliq-cli account list on a clean developer machine.",
+      "Zero compiler warnings (TreatWarningsAsErrors=true) and zero nullable reference violations at build time."
+    ]
+  },
+  "technicalChallenges": [
+    {
+      "challenge": "P/Invoke correctness across three OS keychain APIs",
+      "mitigation": "Dedicated integration tests on macOS, Windows, and Linux for each platform keychain implementation"
+    },
+    {
+      "challenge": "Self-contained binary size (50–80 MB per RID)",
+      "mitigation": "Native AOT is the long-term mitigation (post-v1); PublishSingleFile with JIT is acceptable for v1"
+    },
+    {
+      "challenge": "New Zoho datacenter TLDs not in compile-time host allowlist",
+      "mitigation": "API calls will fail until a new binary is released; ZohoCorp domain check is TLD-agnostic by design but the allowlist is not — monitor Zoho infrastructure announcements"
+    },
+    {
+      "challenge": "OAuth2 scope enforcement — advisory only in v1",
+      "mitigation": "Full enforcement requires OAuth2 (v2); v1 scope metadata is advisory only; PAT with broad permissions can call any endpoint regardless of recorded scopes"
+    },
+    {
+      "challenge": "macOS code-signing / Gatekeeper",
+      "mitigation": "Distribution via notarized binary or Homebrew tap required for smooth installation; deferred to post-GA DevOps phase"
+    }
+  ]
+}

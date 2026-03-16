@@ -1,0 +1,96 @@
+{
+  "stories": [
+    {
+      "storyId": 1,
+      "title": "Three-Project Solution Scaffold + IKeychainProvider",
+      "status": "Not Started",
+      "dependsOn": [],
+      "version": "v1",
+      "phase": "Phase 1 — Foundation"
+    },
+    {
+      "storyId": 2,
+      "title": "Output Contract + Error Infrastructure + Global Settings",
+      "status": "Not Started",
+      "dependsOn": [1],
+      "version": "v1",
+      "phase": "Phase 1 — Foundation"
+    },
+    {
+      "storyId": 3,
+      "title": "AccountStore + PatAuthProvider + ZohoCorp Block",
+      "status": "Not Started",
+      "dependsOn": [1, 2],
+      "version": "v1",
+      "phase": "Phase 2 — Account & API"
+    },
+    {
+      "storyId": 4,
+      "title": "Account Command Group",
+      "status": "Not Started",
+      "dependsOn": [3],
+      "version": "v1",
+      "phase": "Phase 2 — Account & API"
+    },
+    {
+      "storyId": 5,
+      "title": "ApiClient + api call Command",
+      "status": "Not Started",
+      "dependsOn": [3, 4],
+      "version": "v1",
+      "phase": "Phase 2 — Account & API"
+    },
+    {
+      "storyId": 6,
+      "title": "Scope Management Command Group",
+      "status": "Not Started",
+      "dependsOn": [4, 5],
+      "version": "v1",
+      "phase": "Phase 2 — Account & API"
+    },
+    {
+      "storyId": 7,
+      "title": "Trace System + trace session Commands",
+      "status": "Not Started",
+      "dependsOn": [5],
+      "version": "v1",
+      "phase": "Phase 3 — Trace & Utility"
+    },
+    {
+      "storyId": 8,
+      "title": "Utility Commands (util time-ms, util uuid)",
+      "status": "Not Started",
+      "dependsOn": [2],
+      "version": "v1",
+      "phase": "Phase 3 — Trace & Utility"
+    },
+    {
+      "storyId": 9,
+      "title": "API Registry (api registry list/add/show/remove)",
+      "status": "Not Started",
+      "dependsOn": [5],
+      "version": "v2",
+      "phase": "Phase 5 — v2"
+    },
+    {
+      "storyId": 10,
+      "title": "Pex / WMS Real-time Event Buffering",
+      "status": "Not Started",
+      "dependsOn": [7],
+      "version": "v2",
+      "phase": "Phase 5 — v2"
+    },
+    {
+      "storyId": 11,
+      "title": "OAuth2 Authentication (OAuthProvider + account re-auth)",
+      "status": "Not Started",
+      "dependsOn": [3, 4],
+      "version": "v2",
+      "phase": "Phase 5 — v2"
+    }
+  ],
+  "criticalPath": [1, 2, 3, 4, 5, 6, 7],
+  "v1Stories": [1, 2, 3, 4, 5, 6, 7, 8],
+  "v2Stories": [9, 10, 11],
+  "notes": "Stories 9-11 may only be started after all v1 stories are Completed. Story 10 depends on 7 (trace system must exist for pex trace entries)."
+}

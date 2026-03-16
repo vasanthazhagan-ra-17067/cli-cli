@@ -1,0 +1,52 @@
+{
+  "storyId": 11,
+  "title": "OAuth2 Authentication (OAuthProvider + account re-auth)",
+  "description": "Implement OAuthProvider as a drop-in IAuthProvider replacement using a terminal-only, API-based OAuth2 flow (no browser, no redirect listener). Activate account re-auth and support --client-id / --client-secret at account add.",
+  "status": "Not Started",
+  "dependsOn": [3, 4],
+  "prerequisiteState": "All v1 stories complete. IAuthProvider, PatAuthProvider, AccountStore, and account commands all working. account re-auth returns NOT_IMPLEMENTED stub.",
+  "goal": "A user can add an OAuth2 account with --client-id and --client-secret. account re-auth exchanges a new token via the Zoho OAuth2 API from the terminal without a browser. api call on an account with needs_reauth=false uses the OAuth token transparently.",
+  "scope": [
+    "Create src/CliqCli.Core/Auth/OAuthProvider.cs implementing IAuthProvider; stores access token under key 'cliq-cli:<accountName>:oauth' and refresh token under 'cliq-cli:<accountName>:oauth_refresh' via IKeychainProvider",
+    "OAuthProvider.StoreTokenAsync: accepts a combined 'access_token|refresh_token' format (or accept two-field DTO); calls ZohoCorpGuard.AssertNotZohoCorp(email) before any keychain write",
+    "OAuthProvider.GetTokenAsync: reads access token; if access token is expired (check expiry field in AccountEntry -- add ExpiresAt? DateTimeOffset field), call RefreshTokenAsync internally",
+    "Implement token exchange: POST https://accounts.{domain}/oauth/v2/token with grant_type=client_credentials and client_id/client_secret; store response access_token + refresh_token",
+    "Implement token refresh: POST https://accounts.{domain}/oauth/v2/token with grant_type=refresh_token and refresh_token; update stored tokens",
+    "Update AccountEntry: add optional ClientId? string and ExpiresAt? DateTimeOffset fields for OAuth accounts",
+    "Update AccountStore: save/load new optional fields (backward-compatible — null if absent in existing accounts.json)",
+    "Update AddAccountSettings: add --client-id and --client-secret optional flags; if both present, use OAuthProvider flow instead of PatAuthProvider",
+    "Update Program.cs DI: register OAuthProvider alongside PatAuthProvider; use a factory/strategy pattern on IAuthProvider that selects implementation based on AccountEntry.TokenType ('pat' vs 'oauth')",
+    "Activate ReAuthAccountCommand: replace NOT_IMPLEMENTED stub with OAuthProvider.RefreshTokenAsync call, clear NeedsReauth",
+    "Unit tests: OAuthProvider stores tokens with correct keychain keys; OAuthProvider rejects zohocorp domain; token refresh is called when ExpiresAt < UtcNow; re-auth clears NeedsReauth; api call after re-auth proceeds without NEEDS_REAUTH"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build succeeds with 0 errors and 0 warnings",
+    "account add --name work --client-id cid --client-secret csec exchanges tokens via Zoho OAuth2 API and stores them in keychain with token_type='oauth'",
+    "OAuthProvider.GetTokenAsync returns the access token; if expired, refreshes transparently",
+    "account re-auth --name work exchanges a new token and sets needs_reauth=false, returns success",
+    "api call after account re-auth proceeds normally without NEEDS_REAUTH error",
+    "OAuthProvider.StoreTokenAsync with a zohocorp.com email → ACCOUNT_DOMAIN_BLOCKED, exit 1",
+    "ApiClient.CallAsync selects OAuthProvider for oauth accounts and PatAuthProvider for pat accounts via the auth strategy",
+    "Access and refresh tokens never appear in any output, accounts.json, or trace files",
+    "Existing PAT accounts in accounts.json continue to work without migration",
+    "No browser window, redirect URL, or local HTTP server required at any point",
+    "All unit tests pass"
+  ],
+  "contextForAgent": "Read ADR-0005 — specifically the planned v2 OAuth flow: API-based terminal flow, client credentials or device-authorization grant, calling Zoho OAuth2 endpoints directly. Read OQ-001 for user-info endpoint. The IAuthProvider DI registration needs to change from a singleton to a factory/keyed service that selects PatAuthProvider or OAuthProvider based on AccountEntry.TokenType. ApiClient must resolve the auth provider per-account. Consider using .NET keyed services (IKeyedServiceProvider) or a simple factory class AuthProviderFactory.Create(tokenType). Do NOT add a browser or local HTTP listener under any circumstances.",
+  "openItems": [
+    {
+      "item": "Zoho OAuth2 token endpoint",
+      "defaultAssumption": "POST https://accounts.{domain}/oauth/v2/token. For client_credentials: body = { grant_type: client_credentials, client_id: ..., client_secret: ... }. Response: { access_token, refresh_token, expires_in (seconds) }. Store ExpiresAt = UtcNow + expires_in seconds."
+    },
+    {
+      "item": "Auth provider selection strategy",
+      "defaultAssumption": "Create internal sealed class AuthProviderSelector in CliqCli.Core with a GetProvider(string tokenType) method returning IAuthProvider. Register both PatAuthProvider and OAuthProvider in DI as named/keyed services. ApiClient receives AuthProviderSelector via constructor injection."
+    }
+  ],
+  "sourceReferences": [
+    "tech_spec/adr/adr-0005-pat-first-auth-pluggable-iauthprovider.md",
+    "tech_spec/cliq-cli-prd.md §10.9 CLIQ-009",
+    "tech_spec/tech_spec.md §6 Authentication"
+  ],
+  "relevantOpenQuestions": ["OQ-001"]
+}

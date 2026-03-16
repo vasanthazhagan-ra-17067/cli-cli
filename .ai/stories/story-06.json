@@ -1,0 +1,46 @@
+{
+  "storyId": 6,
+  "title": "Scope Management Command Group",
+  "description": "Implement scope add, scope remove, and scope list commands. These commands record OAuth scope metadata per account and signal re-authentication required by setting needs_reauth=true, preparing the schema for v2 OAuth2 without breaking any existing data.",
+  "status": "Not Started",
+  "dependsOn": [4, 5],
+  "prerequisiteState": "Stories 1-5 complete. AccountStore, PatAuthProvider, ApiClient, and all account commands working. NEEDS_REAUTH check in ApiClient.CallAsync live.",
+  "goal": "scope add/remove/list commands correctly mutate and read the scopes[] array and needs_reauth flag on AccountEntry, and the next api call on an account with needs_reauth=true correctly surfaces NEEDS_REAUTH.",
+  "scope": [
+    "Create src/CliqCli/Commands/ScopeCommands.cs with ScopeAddCommand, ScopeRemoveCommand, ScopeListCommand — each AsyncCommand<TSettings> inheriting GlobalSettings",
+    "ScopeAddSettings: --scope (req), --account (optional override); ScopeAddCommand.ExecuteAsync: (1) resolve account (--account or default); (2) apply ZohoCorpGuard check (see OQ-005); (3) if scope not already in Scopes[], append it; (4) set NeedsReauth=true; (5) SaveAsync; (6) return success with updated scopes array",
+    "ScopeRemoveSettings: --scope (req), --account (optional); ScopeRemoveCommand.ExecuteAsync: (1) resolve account; (2) ZohoCorpGuard check; (3) remove scope from Scopes[]; (4) set NeedsReauth=true; (5) SaveAsync; (6) return success",
+    "ScopeListSettings: --account (optional); ScopeListCommand.ExecuteAsync: (1) resolve account; (2) ZohoCorpGuard check; (3) return success with scopes array",
+    "Register all three commands under 'scope' branch in Program.cs",
+    "Unit tests: scope add on non-existent account → ACCOUNT_NOT_FOUND; scope add sets needs_reauth=true; scope add is idempotent (adding same scope twice keeps it once); scope remove sets needs_reauth=true; scope remove on missing scope is a no-op (success, no error); scope list on ZohoCorp account → ACCOUNT_DOMAIN_BLOCKED; api call after scope add returns NEEDS_REAUTH exit 2 (integration with story 5 ApiClient check)"
+  ],
+  "acceptanceCriteria": [
+    "dotnet build succeeds with 0 errors and 0 warnings",
+    "scope add --scope ZohoCliq.Channels.READ --account work returns { \"status\": \"ok\", \"data\": { \"account\": \"work\", \"scopes\": [\"ZohoCliq.Channels.READ\"] } }",
+    "scope add is idempotent — adding the same scope twice results in exactly one entry in scopes[]",
+    "scope add sets needs_reauth=true on the AccountEntry",
+    "scope remove removes the scope and sets needs_reauth=true",
+    "scope remove on a scope that does not exist returns success (no-op, no error)",
+    "scope list returns the current scopes array",
+    "scope add/remove/list on a ZohoCorp-domain account → ACCOUNT_DOMAIN_BLOCKED, exit 1",
+    "api call after scope add returns NEEDS_REAUTH, exit 2 (end-to-end test)",
+    "All unit tests pass"
+  ],
+  "contextForAgent": "Read tech_spec §4 scope group and §6 Scope Change + Re-auth Flow. The ZohoCorp check applies to all scope commands per ADR-0006 and OQ-005 default assumption. Account resolution follows the standard pattern: if --account flag is set use that name, else call IAccountStore.GetDefaultAsync(). NeedsReauth must be set to true even if the scope list did not actually change (i.e., adding a scope that already exists should still be idempotent in the scopes[] array but should not assert needs_reauth if no change occurred — use your judgment; the default assumption is: only set needs_reauth=true if the scopes[] list actually changed).",
+  "openItems": [
+    {
+      "item": "NeedsReauth on no-change scope add",
+      "defaultAssumption": "Only set NeedsReauth=true if the scope was not already present (genuine add). If the scope already exists, return success without mutating NeedsReauth."
+    },
+    {
+      "item": "NeedsReauth on scope remove of non-existent scope",
+      "defaultAssumption": "If the scope to remove is not in the list, return success without mutating NeedsReauth."
+    }
+  ],
+  "sourceReferences": [
+    "tech_spec/tech_spec.md §4 CLI Structure (scope group)",
+    "tech_spec/tech_spec.md §6 Authentication (Scope Change + Re-auth Flow)",
+    "tech_spec/adr/adr-0006-zohocorp-account-restriction.md"
+  ],
+  "relevantOpenQuestions": ["OQ-005"]
+}
