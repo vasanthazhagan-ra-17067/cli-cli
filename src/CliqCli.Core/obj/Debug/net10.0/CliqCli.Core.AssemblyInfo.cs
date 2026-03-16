@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CliqCli.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a502de4b181593b9699771152e408249efbf2f5a")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+309e0dd6f1b28b1901e0f8f6f52ec4b8e7b7764a")]
 [assembly: System.Reflection.AssemblyProductAttribute("CliqCli.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CliqCli.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -27,3 +27,12 @@
 /Users/vasanth-17067/Development/cliq-cli/src/CliqCli/obj/Debug/net10.0/cliq-cli.pdb
 /Users/vasanth-17067/Development/cliq-cli/src/CliqCli/obj/Debug/net10.0/CliqCli.genruntimeconfig.cache
 /Users/vasanth-17067/Development/cliq-cli/src/CliqCli/obj/Debug/net10.0/ref/cliq-cli.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli/bin/Debug/net10.0/Microsoft.Extensions.Configuration.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli/bin/Debug/net10.0/Microsoft.Extensions.Configuration.Abstractions.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli/bin/Debug/net10.0/Microsoft.Extensions.Configuration.Binder.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli/bin/Debug/net10.0/Microsoft.Extensions.Logging.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli/bin/Debug/net10.0/Microsoft.Extensions.Logging.Configuration.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli/bin/Debug/net10.0/Microsoft.Extensions.Logging.Console.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli/bin/Debug/net10.0/Microsoft.Extensions.Options.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli/bin/Debug/net10.0/Microsoft.Extensions.Options.ConfigurationExtensions.dll
+/Users/vasanth-17067/Development/cliq-cli/src/CliqCli/bin/Debug/net10.0/Microsoft.Extensions.Primitives.dll

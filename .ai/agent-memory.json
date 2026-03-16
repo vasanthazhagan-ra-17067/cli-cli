@@ -61,5 +61,48 @@
       "tests": "1 passing (placeholder), N/A for domain tests",
       "commandsWorking": []
     }
+  },
+  {
+    "storyId": 2,
+    "title": "Output Contract + Error Infrastructure + Global Settings",
+    "status": "Completed",
+    "completedDate": "2026-03-16",
+    "filesCreatedOrModified": [
+      { "path": "src/CliqCli.Core/IOutputWriter.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/JsonOutputWriter.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/InMemoryOutputWriter.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/CliqCliException.cs", "action": "created" },
+      { "path": "src/CliqCli.Core/ErrorCodes.cs", "action": "created" },
+      { "path": "src/CliqCli/Commands/GlobalSettings.cs", "action": "created" },
+      { "path": "src/CliqCli/Program.cs", "action": "modified" },
+      { "path": "src/CliqCli/CliqCli.csproj", "action": "modified" },
+      { "path": "tests/CliqCli.Tests/OutputWriterTests.cs", "action": "created" }
+    ],
+    "keyDecisionsMade": [
+      "ErrorEnvelope uses [JsonPropertyName(\"exitCode\")] to override SnakeCaseLower naming policy — the output contract requires camelCase 'exitCode', not 'exit_code'.",
+      "OutputJsonOptions and ErrorEnvelope are defined as internal types in JsonOutputWriter.cs; InMemoryOutputWriter reuses them since both are in the same CliqCli.Core assembly.",
+      "InMemoryOutputWriter is placed in CliqCli.Core (not in the test project) so all future test stories can inject it without coupling.",
+      "--version is intercepted in Main() before the CommandApp because Spectre.Console.Cli's CommandApp does not add --version automatically without a root command type. Outputs AssemblyInformationalVersion.",
+      "Ctrl+C (OperationCanceledException) returns exit code 1 with no output in the exception handler.",
+      "Microsoft.Extensions.Logging.Console configured with LogToStandardErrorThreshold = LogLevel.Trace so all Warning+ logs go to stderr only.",
+      "INTERNAL_ERROR added to ErrorCodes for unhandled generic exceptions in the global exception handler."
+    ],
+    "openQuestionsResolved": [
+      {
+        "id": "OQ-007",
+        "resolution": "WriteError accepts optional 'detail' parameter. ErrorEnvelope includes 'detail' with DefaultIgnoreCondition.WhenWritingNull so it is only emitted when non-null. Used for API_ERROR only."
+      }
+    ],
+    "issuesEncountered": [
+      {
+        "issue": "Spectre.Console.Cli's CommandApp does not add --version automatically without a root command type.",
+        "resolution": "Intercept args is [\"--version\"] at the top of Main() before the CommandApp, print AssemblyInformationalVersion, return 0."
+      }
+    ],
+    "stateAfterStory": {
+      "build": "passing",
+      "tests": "6 passing (1 placeholder + 5 output writer tests)",
+      "commandsWorking": ["cliq-cli --help", "cliq-cli --version"]
+    }
   }
 ]

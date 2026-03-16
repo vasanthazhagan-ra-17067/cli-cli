@@ -745,6 +745,14 @@
               "target": "Package",
               "version": "[10.0.0, )"
             },
+            "Microsoft.Extensions.Logging": {
+              "target": "Package",
+              "version": "[10.0.0, )"
+            },
+            "Microsoft.Extensions.Logging.Console": {
+              "target": "Package",
+              "version": "[10.0.0, )"
+            },
             "Spectre.Console.Cli": {
               "target": "Package",
               "version": "[0.49.1, )"
